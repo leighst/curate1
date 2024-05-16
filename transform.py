@@ -3,10 +3,6 @@ from typing import List
 from pydantic import BaseModel
 import json
 
-class FilterResult(BaseModel):
-  docs: List[str]
-  meta: List[str]
-
 system_prompt_template = """
 You are a research assistant and your job is to search for articles relevant to my interests. 
 Below, I will provide the content of a document, and a detailed description of the sort of documents I am looking for.
@@ -66,13 +62,17 @@ DOCUMENT CONTENT:
 {document_content}
 """
 
+class AnnotatedDoc(BaseModel):
+  doc: str
+  annotation: str
+
 class Transformer:
   def __init__(self, openai: OpenAI):
     self.openai = openai
 
-  def filter_spec(self, docs: List[str], spec: str) -> FilterResult:
-    relevant_docs = []
-    relevant_meta = []
+  def filter_spec(self, docs: List[str], spec: str) -> List[AnnotatedDoc]:
+    annotated_docs: List[AnnotatedDoc] = []
+    
     for doc in docs:
       system_prompt = system_prompt_template
       user_prompt = user_prompt_template.format(document_content=doc, search_description=spec)
@@ -86,13 +86,19 @@ class Transformer:
         model="gpt-4o",
       )
       print(response)
-      if response.choices[0].message.content:
-        response_json = json.loads(response.choices[0].message.content)
-        if response_json["highly_relevant"]:
-          relevant_docs.append(doc)
-          relevant_meta.append(response_json['reasoning'])
+      content = response.choices[0].message.content
+      if content:
+        # Check if content is wrapped in a markdown code block
+        if content.startswith("```json"):
+          # Strip markdown code block syntax to extract JSON
+          json_str = content[7:-3].strip()
+        else:
+          json_str = content
 
-    return FilterResult(docs=relevant_docs, meta=relevant_meta)
+        response_json = json.loads(json_str)
+        annotated_docs.append(AnnotatedDoc(doc=doc, annotation=json_str))
+
+    return annotated_docs
 
   @staticmethod
   def from_env():

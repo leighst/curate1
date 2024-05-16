@@ -6,17 +6,30 @@ def main():
   parser = argparse.ArgumentParser(description="Hacker News Data Ingestion Tool")
   subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-  # Command 'start'
-  start_parser = subparsers.add_parser('start', help="Start the ingestion process")
-  start_parser.add_argument('--start-index', type=int, required=True, help="Start index for ingestion")
-  start_parser.add_argument('--end-index', type=int, required=True, help="End index for ingestion")
-  start_parser.add_argument('--batch-size', type=int, default=100, help="Batch size for ingestion")
-  start_parser.add_argument('--overwrite', action='store_true', help="Overwrite existing data")
-  start_parser.add_argument('--db-path', type=str, required=False, default="curate1.db", help="Path to the database")
+  # Command 'load'
+  load_parser = subparsers.add_parser('load', help="Start the ingestion process")
+  load_subparsers = load_parser.add_subparsers(dest="load_command")
+  
+  # Command 'load range'
+  load_range_parser = load_subparsers.add_parser('range', help="Load range of posts")
+  load_range_parser.add_argument('--start-index', type=int, required=True, help="Start index for ingestion")
+  load_range_parser.add_argument('--end-index', type=int, required=True, help="End index for ingestion")
+  load_range_parser.add_argument('--batch-size', type=int, default=100, help="Batch size for ingestion")
+  load_range_parser.add_argument('--overwrite', action='store_true', help="Overwrite existing data")
+  load_range_parser.add_argument('--db-path', type=str, required=False, default="curate1.db", help="Path to the database")
+  
+  # Command 'load ids'
+  load_ids_parser = load_subparsers.add_parser('ids', help="Load list of post ids")
+  load_ids_parser.add_argument('--ids', type=lambda x: [int(i) for i in x.split(',')], help="Comma separated list of post IDs for ingestion")
+  load_ids_parser.add_argument('--batch-size', type=int, default=100, help="Batch size for ingestion")
+  load_ids_parser.add_argument('--overwrite', action='store_true', help="Overwrite existing data")
+  load_ids_parser.add_argument('--db-path', type=str, required=False, default="curate1.db", help="Path to the database")
 
   # Command 'db'
   db_parser = subparsers.add_parser('db', help="Database operations")
   db_subparsers = db_parser.add_subparsers(dest="db_command", help="Database commands")
+
+  # Command 'db apply'
   db_push_parser = db_subparsers.add_parser('apply', help="Push data to the database")
   db_push_parser.add_argument('--db-path', type=str, required=False, default="curate1.db", help="Path to the database")
 
@@ -32,7 +45,7 @@ def main():
 def handle_ingest_command(args):
   db = Database(args.db_path)
   p = Pipeline(db)
-  p.load_hackernews_posts(args.start_index, args.end_index, args.batch_size, args.overwrite)
+  p.load_hackernews_posts_range(args.start_index, args.end_index, args.batch_size, args.overwrite)
 
 def handle_db_command(db_command, args): 
   db = Database(args.db_path)
