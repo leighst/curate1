@@ -66,11 +66,11 @@ class AnnotatedDoc(BaseModel):
   doc: str
   annotation: str
 
-class Transformer:
+class FilterSpec:
   def __init__(self, openai: OpenAI):
     self.openai = openai
 
-  def filter_spec(self, docs: List[str], spec: str) -> List[AnnotatedDoc]:
+  def apply(self, docs: List[str], spec: str) -> List[AnnotatedDoc]:
     annotated_docs: List[AnnotatedDoc] = []
     
     for doc in docs:
@@ -95,7 +95,6 @@ class Transformer:
         else:
           json_str = content
 
-        response_json = json.loads(json_str)
         annotated_docs.append(AnnotatedDoc(doc=doc, annotation=json_str))
 
     return annotated_docs
@@ -103,4 +102,4 @@ class Transformer:
   @staticmethod
   def from_env():
       openai = OpenAI()
-      return Transformer(openai)
+      return FilterSpec(openai)

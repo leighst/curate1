@@ -6,6 +6,7 @@
 import requests
 import json
 from selenium import webdriver
+import re
 from bs4 import BeautifulSoup
 
 class Pipeline:
@@ -86,4 +87,5 @@ class Pipeline:
     driver.get(post_url)
     driver.implicitly_wait(10)
     soup = BeautifulSoup(driver.page_source, 'html.parser')
-    return soup.get_text()
+    text = soup.get_text()
+    return re.sub('(\s|\\\\n)+', ' ', text)
