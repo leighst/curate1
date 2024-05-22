@@ -10,6 +10,7 @@ import re
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 from newspaper import Article
+from transform.filter_spec import FilterSpec
 
 class Pipeline:
   def __init__(self, db):
@@ -131,3 +132,45 @@ class Pipeline:
     soup = BeautifulSoup(driver.page_source, 'html.parser')
     text = soup.get_text()
     return re.sub('(\s|\\\\n)+', ' ', text)
+
+  def load_filter_spec(self, spec, start_index, end_index, batch_size, parallelism, overwrite):
+    print(f"Loading filter spec {spec}")
+    if not overwrite:
+      latest_index = self.db.get_max_attribute_id(f"u0_{spec}_spec")
+      start_index = latest_index + 1 if latest_index is not None else start_index
+    while start_index < end_index:
+      fetched_post_ids = self.load_filter_spec_batch(spec, start_index, batch_size, parallelism)
+      fetched_post_ids.sort()
+      start_index = fetched_post_ids[-1] + 1
+    
+  def load_filter_spec_batch(self, spec, start_index, batch_size, parallelism):
+    print(f"Loading {batch_size} filter spec items beginning with {start_index}")
+    posts = self.db.get_posts_from_id(start_index, batch_size)
+    attributes = self.apply_filter_spec(spec, posts, parallelism)
+    self.db.insert_doc_attributes(attributes, f"u0_{spec}_spec")
+    return [post['id'] for post in posts]
+
+  def apply_filter_spec(self, spec, posts, parallelism):
+    print(f"Applying filter spec {spec} to {len(posts)} posts")
+    spec_content = ""
+    try:
+      with open(f"prompts/specs/{spec}.txt", "r") as file:
+          spec_content = file.read()
+    except FileNotFoundError:
+      print(f"Spec file for {spec} not found.")
+    except Exception as e:
+      print(f"An error occurred while reading the spec file: {e}")
+
+    def annotate_post(post):
+      print(f"Annotating {post}")
+      filter_spec = FilterSpec.from_env()
+      docs = [post['content']]
+      result = filter_spec.apply(docs, spec_content)
+      return {
+        "post": post,
+        "annotated_doc": result[0]
+      }
+
+    with ThreadPoolExecutor(max_workers=parallelism) as executor:
+      annotated_posts = list(executor.map(annotate_post, posts))
+

@@ -2,6 +2,7 @@ import os
 import sqlite3
 import json
 import time
+from typing import List
 
 class Database:
   def __init__(self, db_path):
@@ -116,7 +117,20 @@ class Database:
     else:
       print(f"No post found with ID {post_id}")
       return None
-
+    
+  def get_post_with_content_like(self, terms: List[str]):
+    cursor = self.conn.cursor()
+    query = "SELECT posts.*, attributes.value AS content FROM posts JOIN attributes ON posts.id = attributes.post_id WHERE " + " OR ".join([f"attributes.value LIKE ?" for _ in terms])
+    cursor.execute(query, ['%' + term + '%' for term in terms])
+    rows = cursor.fetchall()
+    posts = []
+    if rows:
+      columns = [column[0] for column in cursor.description]
+      for row in rows:
+        post = dict(zip(columns, row))
+        posts.append(post)
+    return posts
+    
   def get_max_item_id(self):
     cursor = self.conn.cursor()
     cursor.execute('''
@@ -126,10 +140,13 @@ class Database:
     return max_id
 
   def get_max_content_id(self):
+    return self.get_max_attribute_id('hn_content')
+  
+  def get_max_attribute_id(self, label):
     cursor = self.conn.cursor()
     cursor.execute('''
       SELECT MAX(post_id) FROM attributes
-      WHERE label = 'hn_content'
-    ''')
+      WHERE label = ?
+    ''', (label,))
     max_id = cursor.fetchone()[0]
     return max_id
