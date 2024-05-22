@@ -15,8 +15,10 @@ def main():
   load_range_parser.add_argument('--start-index', type=int, required=True, help="Start index for ingestion")
   load_range_parser.add_argument('--end-index', type=int, required=True, help="End index for ingestion")
   load_range_parser.add_argument('--batch-size', type=int, default=100, help="Batch size for ingestion")
+  load_range_parser.add_argument('--parallelism', type=int, default=100, help="Parallelism for ingestion")
   load_range_parser.add_argument('--overwrite', action='store_true', help="Overwrite existing data")
   load_range_parser.add_argument('--db-path', type=str, required=False, default="curate1.db", help="Path to the database")
+  load_range_parser.add_argument('--stage', type=str, required=False, default="posts", help="Path to the database")
   
   # Command 'load ids'
   load_ids_parser = load_subparsers.add_parser('ids', help="Load list of post ids")
@@ -35,7 +37,7 @@ def main():
 
   args = parser.parse_args()
 
-  if args.command == 'start':
+  if args.command == 'load':
     handle_ingest_command(args)
   elif args.command == 'db':
     handle_db_command(args.db_command, args)
@@ -45,7 +47,14 @@ def main():
 def handle_ingest_command(args):
   db = Database(args.db_path)
   p = Pipeline(db)
-  p.load_hackernews_posts_range(args.start_index, args.end_index, args.batch_size, args.overwrite)
+  if args.load_command == 'range':
+    if args.stage == 'content':
+      p.load_hackernews_contents_range(args.start_index, args.end_index, args.batch_size, args.parallelism, args.overwrite)
+    else:
+      p.load_hackernews_posts_range(args.start_index, args.end_index, args.batch_size, args.overwrite)
+  
+  elif args.load_command == 'ids':
+    p.load_hackernews_posts_by_ids(args.ids, args.batch_size, args.overwrite)
 
 def handle_db_command(db_command, args): 
   db = Database(args.db_path)

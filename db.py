@@ -71,8 +71,21 @@ class Database:
     posts = []
     columns = [column[0] for column in cursor.description]
     for row in rows:
-        post = dict(zip(columns, row))
-        posts.append(post)
+      post = dict(zip(columns, row))
+      posts.append(post)
+    return posts
+  
+  def get_posts_from_id(self, start_id, count):
+    cursor = self.conn.cursor()
+    cursor.execute('''
+      SELECT * FROM posts WHERE id >= ? ORDER BY id ASC LIMIT ?
+    ''', (start_id, count))
+    rows = cursor.fetchall()
+    posts = []
+    columns = [column[0] for column in cursor.description]
+    for row in rows:
+      post = dict(zip(columns, row))
+      posts.append(post)
     return posts
 
   def insert_doc_attributes(self, attributes, label):
@@ -88,18 +101,35 @@ class Database:
     print(f"Attributes with label '{label}' added for {len(attributes)} posts.")
 
   def get_post_with_content(self, post_id):
-      cursor = self.conn.cursor()
-      cursor.execute('''
-          SELECT posts.*, attributes.value AS content
-          FROM posts
-          JOIN attributes ON posts.id = attributes.post_id
-          WHERE posts.id = ?
-      ''', (post_id,))
-      row = cursor.fetchone()
-      if row:
-          columns = [column[0] for column in cursor.description]
-          post_with_content = dict(zip(columns, row))
-          return post_with_content
-      else:
-          print(f"No post found with ID {post_id}")
-          return None
+    cursor = self.conn.cursor()
+    cursor.execute('''
+      SELECT posts.*, attributes.value AS content
+      FROM posts
+      JOIN attributes ON posts.id = attributes.post_id
+      WHERE posts.id = ?
+    ''', (post_id,))
+    row = cursor.fetchone()
+    if row:
+      columns = [column[0] for column in cursor.description]
+      post_with_content = dict(zip(columns, row))
+      return post_with_content
+    else:
+      print(f"No post found with ID {post_id}")
+      return None
+
+  def get_max_item_id(self):
+    cursor = self.conn.cursor()
+    cursor.execute('''
+      SELECT MAX(id) FROM posts
+    ''')
+    max_id = cursor.fetchone()[0]
+    return max_id
+
+  def get_max_content_id(self):
+    cursor = self.conn.cursor()
+    cursor.execute('''
+      SELECT MAX(post_id) FROM attributes
+      WHERE label = 'hn_content'
+    ''')
+    max_id = cursor.fetchone()[0]
+    return max_id
