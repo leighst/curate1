@@ -76,6 +76,22 @@ class Database:
       posts.append(post)
     return posts
   
+  def get_posts_with_content_by_ids(self, ids):
+    cursor = self.conn.cursor()
+    cursor.execute('''
+      SELECT posts.*, attributes.value AS content
+      FROM posts
+      JOIN attributes ON posts.id = attributes.post_id
+      WHERE posts.id IN ({}) AND attributes.label = 'hn_content'
+    '''.format(','.join('?' for _ in ids)), ids)
+    rows = cursor.fetchall()
+    posts = []
+    columns = [column[0] for column in cursor.description]
+    for row in rows:
+      post = dict(zip(columns, row))
+      posts.append(post)
+    return posts
+  
   def get_posts_from_id(self, start_id, count):
     cursor = self.conn.cursor()
     cursor.execute('''
@@ -97,7 +113,7 @@ class Database:
       cursor.execute('''
         INSERT INTO attributes (post_id, value, label, time)
         VALUES (?, ?, ?, ?)
-      ''', (post_id, json.dumps(value), label, int(time.time())))
+      ''', (post_id, value, label, int(time.time())))
     self.conn.commit()
     print(f"Attributes with label '{label}' added for {len(attributes)} posts.")
 
@@ -130,7 +146,30 @@ class Database:
         post = dict(zip(columns, row))
         posts.append(post)
     return posts
+
+  def get_posts_with_content_from_id(self, start_id, count, search_terms):
+    like_terms = [f"%{s}%" for s in search_terms]
     
+    print(f"search for posts from {start_id} with content like {like_terms}")
+
+    cursor = self.conn.cursor()
+    query = ('''
+      SELECT posts.*, attributes.value AS content
+      FROM posts
+      JOIN attributes ON posts.id = attributes.post_id
+      WHERE posts.id >= ? AND attributes.label = 'hn_content' AND (''' + 
+      " OR ".join(["attributes.value LIKE ?" for _ in like_terms]) + 
+      ") ORDER BY posts.id ASC LIMIT ?")
+    print(query)
+    cursor.execute(query, (start_id, *like_terms, count))
+    rows = cursor.fetchall()
+    posts = []
+    columns = [column[0] for column in cursor.description]
+    for row in rows:
+      post = dict(zip(columns, row))
+      posts.append(post)
+    return posts
+
   def get_max_item_id(self):
     cursor = self.conn.cursor()
     cursor.execute('''
@@ -150,3 +189,17 @@ class Database:
     ''', (label,))
     max_id = cursor.fetchone()[0]
     return max_id
+
+  def get_attributes(self, spec):
+    cursor = self.conn.cursor()
+    cursor.execute('''
+      SELECT * FROM attributes WHERE label = ?
+    ''', (spec,))
+    rows = cursor.fetchall()
+    attributes = []
+    columns = [column[0] for column in cursor.description]
+    for row in rows:
+      attribute = dict(zip(columns, row))
+      attributes.append(attribute)
+    return attributes
+

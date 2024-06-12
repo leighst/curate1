@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Name: curate1
+Version: 0.1.0
+Requires-Dist: dagster
+Requires-Dist: pandas
+Requires-Dist: tenacity
+Requires-Dist: requests
+Provides-Extra: dev
+Requires-Dist: dagster-webserver; extra == "dev"
+Requires-Dist: pytest; extra == "dev"

@@ -71,7 +71,15 @@ def handle_ingest_command(args):
 def handle_filter_command(args):
   db = Database(args.db_path)
   p = Pipeline(db)
-  p.load_filter_spec(args.spec, args.start_index, args.end_index, args.batch_size, args.parallelism, args.overwrite)
+  p.load_filter_spec(
+    args.spec, 
+    [" iac ", "terraform", "pulumi", "cloudformation", "kubernetes"], 
+    args.start_index, 
+    args.end_index, 
+    args.batch_size, 
+    args.parallelism, 
+    args.overwrite
+  )
   
 def handle_db_command(db_command, args): 
   db = Database(args.db_path)

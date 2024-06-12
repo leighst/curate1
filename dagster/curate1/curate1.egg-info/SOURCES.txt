@@ -1,0 +1,11 @@
+README.md
+pyproject.toml
+setup.cfg
+setup.py
+curate1/__init__.py
+curate1/partitions.py
+curate1.egg-info/PKG-INFO
+curate1.egg-info/SOURCES.txt
+curate1.egg-info/dependency_links.txt
+curate1.egg-info/requires.txt
+curate1.egg-info/top_level.txt

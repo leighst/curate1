@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.dagster]
+module_name = "curate1"
+
+[project]
+name = "curate1"
+version = "0.1.0"
+dependencies = [
+  "dagster",
+  "pandas",
+  "tenacity",
+  "requests",
+]

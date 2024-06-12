@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 from newspaper import Article
 from transform.filter_spec import FilterSpec
+from typing import List
 
 class Pipeline:
   def __init__(self, db):
@@ -133,20 +134,31 @@ class Pipeline:
     text = soup.get_text()
     return re.sub('(\s|\\\\n)+', ' ', text)
 
-  def load_filter_spec(self, spec, start_index, end_index, batch_size, parallelism, overwrite):
+  def load_filter_spec(self, spec, pre_filter_terms, start_index, end_index, batch_size, parallelism, overwrite):
     print(f"Loading filter spec {spec}")
     if not overwrite:
       latest_index = self.db.get_max_attribute_id(f"u0_{spec}_spec")
       start_index = latest_index + 1 if latest_index is not None else start_index
     while start_index < end_index:
-      fetched_post_ids = self.load_filter_spec_batch(spec, start_index, batch_size, parallelism)
+      fetched_post_ids = self.load_filter_spec_batch(spec, pre_filter_terms, start_index, batch_size, parallelism)
       fetched_post_ids.sort()
+      print(fetched_post_ids)
+      if len(fetched_post_ids) == 0:
+        print(f"No posts found for {pre_filter_terms}, stopping...")
+        break
       start_index = fetched_post_ids[-1] + 1
     
-  def load_filter_spec_batch(self, spec, start_index, batch_size, parallelism):
+  def load_filter_spec_batch(self, spec: str, search_terms: List[str], start_index: int, batch_size: int, parallelism: int):
     print(f"Loading {batch_size} filter spec items beginning with {start_index}")
-    posts = self.db.get_posts_from_id(start_index, batch_size)
-    attributes = self.apply_filter_spec(spec, posts, parallelism)
+    posts = self.db.get_posts_with_content_from_id(start_index, batch_size, search_terms)
+    if len(posts) == 0:
+      print(f"No posts found for {search_terms}, stopping...")
+      return []
+    result = self.apply_filter_spec(spec, posts, parallelism)
+    attributes = [{
+      "post_id": ad['post']['id'],
+      "value": ad['annotated_doc'].annotation
+    } for ad in result]
     self.db.insert_doc_attributes(attributes, f"u0_{spec}_spec")
     return [post['id'] for post in posts]
 
@@ -155,7 +167,7 @@ class Pipeline:
     spec_content = ""
     try:
       with open(f"prompts/specs/{spec}.txt", "r") as file:
-          spec_content = file.read()
+        spec_content = file.read()
     except FileNotFoundError:
       print(f"Spec file for {spec} not found.")
     except Exception as e:
@@ -174,3 +186,4 @@ class Pipeline:
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
       annotated_posts = list(executor.map(annotate_post, posts))
 
+    return annotated_posts
