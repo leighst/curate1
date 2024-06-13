@@ -7,7 +7,7 @@ from curate1.resources.hn_resource import HNClient
 from .id_range_for_time import id_range_for_time
 
 @asset(partitions_def=hourly_partitions)
-def items(context: AssetExecutionContext, hn_client: HNClient) -> Output[DataFrame]:
+def stories(context: AssetExecutionContext, hn_client: HNClient) -> Output[DataFrame]:
     """Items from the Hacker News API: each is a story or a comment on a story."""
     (start_id, end_id), item_range_metadata = id_range_for_time(context, hn_client)
 
@@ -20,10 +20,11 @@ def items(context: AssetExecutionContext, hn_client: HNClient) -> Output[DataFra
             context.log.info(f"Downloaded {len(rows)} items!")
 
     non_none_rows = [row for row in rows if row is not None]
-    result = DataFrame(non_none_rows).drop_duplicates(subset=["id"])
+    items = DataFrame(non_none_rows).drop_duplicates(subset=["id"])
+    stories = items.where(items["type"] == "story")
 
     return Output(
-        result,
+        stories,
         metadata={
             "Non-empty items": len(non_none_rows),
             "Empty items": rows.count(None),
@@ -32,5 +33,5 @@ def items(context: AssetExecutionContext, hn_client: HNClient) -> Output[DataFra
     )
 
 @asset(partitions_def=hourly_partitions)
-def stories(items: DataFrame) -> DataFrame:
-    return items.where(items["type"] == "story")
+def hn_documents(context: AssetExecutionContext, stories: DataFrame) -> Output[DataFrame]:
+    return Output(stories)
