@@ -3,15 +3,17 @@
 # 3. datasets represented as df
 # 4.
 
-import requests
 import json
-from selenium import webdriver
 import re
-from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
-from newspaper import Article
-from transform.filter_spec import FilterSpec
 from typing import List
+
+import requests
+from bs4 import BeautifulSoup
+from newspaper import Article
+from selenium import webdriver
+from transform.filter_spec import FilterSpec
+
 
 class Pipeline:
   def __init__(self, db):

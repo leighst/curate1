@@ -5,6 +5,8 @@ Requires-Dist: dagster
 Requires-Dist: pandas
 Requires-Dist: tenacity
 Requires-Dist: requests
+Requires-Dist: newspaper3k
+Requires-Dist: lxml_html_clean
 Provides-Extra: dev
 Requires-Dist: dagster-webserver; extra == "dev"
 Requires-Dist: pytest; extra == "dev"

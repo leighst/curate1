@@ -1,7 +1,8 @@
 from dagster import Definitions, load_assets_from_modules
-from .resources import RESOURCES_LOCAL
+
 from .assets import items
 from .jobs import curate1_job
+from .resources import RESOURCES_LOCAL
 
 all_assets = load_assets_from_modules([items])
 

@@ -2,6 +2,8 @@ dagster
 pandas
 tenacity
 requests
+newspaper3k
+lxml_html_clean
 
 [dev]
 dagster-webserver
