@@ -7,6 +7,7 @@ Requires-Dist: tenacity
 Requires-Dist: requests
 Requires-Dist: newspaper3k
 Requires-Dist: lxml_html_clean
+Requires-Dist: openai
 Provides-Extra: dev
 Requires-Dist: dagster-webserver; extra == "dev"
 Requires-Dist: pytest; extra == "dev"

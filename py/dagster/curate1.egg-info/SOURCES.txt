@@ -11,4 +11,5 @@ curate1.egg-info/dependency_links.txt
 curate1.egg-info/requires.txt
 curate1.egg-info/top_level.txt
 curate1/resources/__init__.py
+curate1/resources/article_resource.py
 curate1/resources/hn_resource.py

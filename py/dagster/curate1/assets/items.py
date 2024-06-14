@@ -1,4 +1,5 @@
 from curate1.partitions import hourly_partitions
+from curate1.resources.agent.agent_resource import AgentClient
 from curate1.resources.article_resource import ArticleClient
 from curate1.resources.hn_resource import HNClient
 from dagster import AssetExecutionContext, Output, asset
@@ -82,7 +83,7 @@ def hackernews_documents(
             "Stories without URLs": len(none_url),
             "Stories with content": len(with_content),
             "Stories without content": len(none_content),
-            "Story URLs (first 100)": story_urls[:100],
+            "Story URLs (first 10)": story_urls[:10],
         }
     )
 
@@ -92,12 +93,43 @@ def hackernews_documents(
 def relevance_filter_spec_iac(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
+    agent_client: AgentClient
 ) -> Output[DataFrame]:
-    pass
+    return relevance_filter_spec(
+        context, hackernews_documents, "iac", agent_client)
 
 @asset(partitions_def=hourly_partitions)
 def relevance_filter_spec_coding_with_ai(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
+    agent_client: AgentClient
 ) -> Output[DataFrame]:
-    pass
+    return relevance_filter_spec(
+        context, hackernews_documents, "coding-with-ai", agent_client)
+
+def relevance_filter_spec(
+    context: AssetExecutionContext, 
+    hackernews_documents: DataFrame, 
+    spec_name: str,
+    agent_client: AgentClient
+) -> Output[DataFrame]:
+    contents = hackernews_documents["contents"].tolist()
+    spec_file = f"curate1/resources/agent/prompts/specs/{spec_name}.txt"
+    
+    context.log.info(f"Annotating {len(contents)} docs...")
+    annotations = agent_client.filter_spec_batch(
+        spec_file,
+        contents
+    )
+    hackernews_documents["annotations"] = annotations
+
+    non_empty_annotations = [a for a in annotations if a != ""]
+    empty_annotations = [a for a in annotations if a == ""]
+
+    return Output(
+        hackernews_documents,
+        metadata={
+            "Non-empty annotations": len(non_empty_annotations),
+            "Empty annotations": len(empty_annotations),
+        },
+    )
