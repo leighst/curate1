@@ -15,13 +15,13 @@ class AgentClient(ConfigurableResource, ABC):
 
 
 class OpenAIAgentClient(AgentClient):
-    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> Optional[str]:
-        def annotate_post(content):
+    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> List[Optional[str]]:
+        def annotate_post(content: str) -> Optional[str]:
             try:
                 filter_spec = FilterSpec.from_env()
                 docs = [content]
                 annotation = filter_spec.apply(docs, spec_file)
-                return annotation
+                return annotation[0]
             except Exception as e:
                 print(f"Error annotating {content[:20]}...: {e}")
                 raise

@@ -1,3 +1,5 @@
+import json
+
 from curate1.partitions import hourly_partitions
 from curate1.resources.agent.agent_resource import AgentClient
 from curate1.resources.article_resource import ArticleClient
@@ -117,19 +119,30 @@ def relevance_filter_spec(
     spec_file = f"curate1/resources/agent/prompts/specs/{spec_name}.txt"
     
     context.log.info(f"Annotating {len(contents)} docs...")
-    annotations = agent_client.filter_spec_batch(
+    annotated_docs = agent_client.filter_spec_batch(
         spec_file,
         contents
     )
-    hackernews_documents["annotations"] = annotations
+
+    annotations = [json.loads(a.annotation) for a in annotated_docs]
+    highly_relevant = [a["highly_relevant"] for a in annotations]
+    reasoning = [a["reasoning"] for a in annotations]
+
+    hackernews_documents["highly_relevant"] = highly_relevant
+    hackernews_documents["reasoning"] = reasoning
 
     non_empty_annotations = [a for a in annotations if a != ""]
     empty_annotations = [a for a in annotations if a == ""]
+
+    num_highly_relevant = len([h for h in highly_relevant if h])
+    num_not_relevant = len(annotated_docs) - num_highly_relevant
 
     return Output(
         hackernews_documents,
         metadata={
             "Non-empty annotations": len(non_empty_annotations),
             "Empty annotations": len(empty_annotations),
+            "Highly relevant": num_highly_relevant,
+            "Not relevant": num_not_relevant,
         },
     )
