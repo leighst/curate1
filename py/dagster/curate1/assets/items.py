@@ -146,3 +146,65 @@ def relevance_filter_spec(
             "Not relevant": num_not_relevant,
         },
     )
+
+@asset(partitions_def=hourly_partitions)
+def high_relevance_iac(
+    relevance_filter_spec_iac: DataFrame, 
+) -> DataFrame:
+    return relevance_filter_spec_iac[relevance_filter_spec_iac["highly_relevant"]]
+
+@asset(partitions_def=hourly_partitions)
+def high_relevance_coding_with_ai(
+    relevance_filter_spec_coding_with_ai: DataFrame, 
+) -> DataFrame:
+    return relevance_filter_spec_coding_with_ai[relevance_filter_spec_coding_with_ai["highly_relevant"]]
+
+@asset(partitions_def=hourly_partitions)
+def summary_perspective_summarizer_iac(
+    context: AssetExecutionContext, 
+    high_relevance_iac: DataFrame, 
+    agent_client: AgentClient
+) -> Output[DataFrame]:
+    return summary_perspective_summarizer(
+        context, high_relevance_iac, agent_client)
+
+@asset(partitions_def=hourly_partitions)
+def summary_perspective_summarizer_coding_with_ai(
+    context: AssetExecutionContext, 
+    high_relevance_coding_with_ai: DataFrame, 
+    agent_client: AgentClient
+) -> Output[DataFrame]:
+    return summary_perspective_summarizer(
+        context, high_relevance_coding_with_ai, agent_client)
+    
+def summary_perspective_summarizer(
+    context: AssetExecutionContext, 
+    relevance_filtered: DataFrame, 
+    agent_client: AgentClient
+) -> Output[DataFrame]:
+    contents_with_reasoning = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning']))
+    
+    context.log.info(f"Annotating {len(contents_with_reasoning)} docs...")
+    annotated_docs = agent_client.perspective_summarizer_batch(
+        contents_with_reasoning
+    )
+
+    print(annotated_docs)
+
+    annotations = [json.loads(a.annotation) for a in annotated_docs]
+    summary = [a["summary"] for a in annotations]
+    reasoning = [a["reasoning"] for a in annotations]
+
+    assert len(summary) == len(contents_with_reasoning)
+    assert len(reasoning) == len(contents_with_reasoning)
+
+    df = relevance_filtered.assign(summary=summary, reasoning=reasoning)
+    print(df)
+
+    return Output(
+        df,
+        metadata={
+            "Input size": len(contents_with_reasoning),
+            "Output size": len(summary),
+        },
+    )

@@ -1,7 +1,8 @@
-from openai import OpenAI
-from typing import List
-from pydantic import BaseModel
 import json
+from typing import List
+
+from openai import OpenAI
+from pydantic import BaseModel
 
 system_prompt_template = """
 You are a research assistant and your job is to summarize articles for me in a manner which emphasizes information relevant to my interests. 
@@ -61,7 +62,7 @@ System response:
 """
 
 user_prompt_template = """
-SEARCH DESCRIPTION:
+SEARCH DESCRIPTION: 
 {search_description}
 
 DOCUMENT CONTENT:
@@ -76,36 +77,29 @@ class PerspectiveSummarizer:
   def __init__(self, openai: OpenAI):
     self.openai = openai
 
-  def apply(self, docs: List[AnnotatedDoc]) -> List[AnnotatedDoc]:
-    annotated_docs: List[AnnotatedDoc] = []
+  def apply(self, contents, reasoning) -> List[AnnotatedDoc]:
+    system_prompt = system_prompt_template
+    user_prompt = user_prompt_template.format(document_content=contents, search_description=reasoning)
+    messages=[
+      {"role": "system", "content": system_prompt}, 
+      {"role": "user", "content": user_prompt}
+    ]
+    response = self.openai.chat.completions.create(
+      messages=messages,
+      model="gpt-4o",
+    )
     
-    for doc in docs:
-      annotation = json.loads(doc.annotation)
+    json_str = '{}'
+    content = response.choices[0].message.content
+    if content:
+      # Check if content is wrapped in a markdown code block
+      if content.startswith("```json"):
+        # Strip markdown code block syntax to extract JSON
+        json_str = content[7:-3].strip()
+      else:
+        json_str = content
 
-      system_prompt = system_prompt_template
-      user_prompt = user_prompt_template.format(document_content=doc, search_description=annotation['reasoning'])
-      print(user_prompt)
-      messages=[
-        {"role": "system", "content": system_prompt}, 
-        {"role": "user", "content": user_prompt}
-      ]
-      response = self.openai.chat.completions.create(
-        messages=messages,
-        model="gpt-4o",
-      )
-      print(response)
-      content = response.choices[0].message.content
-      if content:
-        # Check if content is wrapped in a markdown code block
-        if content.startswith("```json"):
-          # Strip markdown code block syntax to extract JSON
-          json_str = content[7:-3].strip()
-        else:
-          json_str = content
-
-        annotated_docs.append(AnnotatedDoc(doc=doc.doc, annotation=json_str))
-
-    return annotated_docs
+    return AnnotatedDoc(doc=contents, annotation=json_str)
 
   @staticmethod
   def from_env():
