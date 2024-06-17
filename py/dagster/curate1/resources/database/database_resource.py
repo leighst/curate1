@@ -1,17 +1,31 @@
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-from dagster import ConfigurableResource
+from dagster import ConfigurableResource, InitResourceContext
 
-PARALLELISM = 4
+from .database import Database, Document, DocumentAttribute
+
 
 class DatabaseResource(ConfigurableResource, ABC):
     @abstractmethod
-    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> Optional[str]:
+    def insert_documents(self, documents: List[Document]) -> None:
+        pass
+
+    @abstractmethod
+    def insert_document_attributes(self, document_attributes: List[DocumentAttribute]) -> None:
         pass
 
 
 class SqliteDatabaseResource(DatabaseResource):
-    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
-        
+    db_path: str
+    _database: Database
+
+    def setup_for_execution(self, context: InitResourceContext) -> None:
+        self._database = Database(context.resource_config["db_path"])
+
+    def insert_documents(self, documents: List[Document]) -> None:
+        self._database.insert_documents(documents)
+
+    def insert_document_attributes(self, document_attributes: List[DocumentAttribute]) -> None:
+        self._database.insert_document_attributes(document_attributes)
+      

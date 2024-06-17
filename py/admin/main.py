@@ -4,7 +4,7 @@ from db import Database
 
 
 def main():
-  parser = argparse.ArgumentParser(description="Curate1 Admin Tool")
+  parser = argparse.ArgumentParser(description="Hacker News Data Ingestion Tool")
   subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
   # Command 'db'
@@ -13,7 +13,7 @@ def main():
 
   # Command 'db apply'
   db_push_parser = db_subparsers.add_parser('apply', help="Push data to the database")
-  db_push_parser.add_argument('--db-path', type=str, required=False, default=".data/curate1.db", help="Path to the database")
+  db_push_parser.add_argument('--db-path', type=str, required=False, default="curate1.db", help="Path to the database")
   args = parser.parse_args()
 
   if args.command == 'db':

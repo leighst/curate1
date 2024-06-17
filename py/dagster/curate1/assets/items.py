@@ -3,6 +3,8 @@ import json
 from curate1.partitions import hourly_partitions
 from curate1.resources.agent.agent_resource import AgentClient
 from curate1.resources.article_resource import ArticleClient
+from curate1.resources.database.database import Document
+from curate1.resources.database.database_resource import DatabaseResource
 from curate1.resources.hn_resource import HNClient
 from dagster import AssetExecutionContext, Output, asset
 from pandas import DataFrame
@@ -61,8 +63,9 @@ def stories(
         },
     )
 
+#TODO: change to document_content
 @asset(partitions_def=hourly_partitions)
-def hackernews_documents(
+def hackernews_documents( 
     context: AssetExecutionContext, 
     stories: DataFrame, 
     article_client: ArticleClient
@@ -89,9 +92,36 @@ def hackernews_documents(
         }
     )
 
+@asset(partitions_def=hourly_partitions)
+def documents_table(
+    context: AssetExecutionContext, 
+    hackernews_documents: DataFrame, 
+    database_resource: DatabaseResource
+) -> Output[DataFrame]:
+    context.log.info(f"Saving {len(hackernews_documents)} documents to sql...")
+    
+    print(hackernews_documents.columns)
+    
+    documents = [Document(
+        id=None,
+        title=hackernews_documents.iloc[i]["title"],
+        content=hackernews_documents.iloc[i]["contents"],
+        source_url=hackernews_documents.iloc[i]["url"],
+        created_at=hackernews_documents.iloc[i]["time"]
+    ) for i in range(len(hackernews_documents))]
+
+    num_inserted = database_resource.insert_documents(documents)
+
+    return Output(
+        hackernews_documents,
+        metadata={
+            "Documents inserted": num_inserted,
+        }
+    )
+
 # TODO: use dynamic partitions for these
 
-@asset(partitions_def=hourly_partitions)
+@asset(partitions_def=hourly_partitions, deps=[documents_table])
 def relevance_filter_spec_iac(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
@@ -100,7 +130,7 @@ def relevance_filter_spec_iac(
     return relevance_filter_spec(
         context, hackernews_documents, "iac", agent_client)
 
-@asset(partitions_def=hourly_partitions)
+@asset(partitions_def=hourly_partitions, deps=[documents_table])
 def relevance_filter_spec_coding_with_ai(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
