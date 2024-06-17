@@ -15,6 +15,10 @@ class AgentClient(ConfigurableResource, ABC):
     def filter_spec_batch(self, spec_file: str, contents: List[str]) -> Optional[str]:
         pass
 
+    @abstractmethod
+    def perspective_summarizer_batch(self, contents_with_reasoning: List[Tuple[str, str]]) -> List[Optional[AnnotatedDoc]]:
+        pass
+
 
 class OpenAIAgentClient(AgentClient):
     def filter_spec_batch(self, spec_file: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:

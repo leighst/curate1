@@ -208,3 +208,17 @@ def summary_perspective_summarizer(
             "Output size": len(summary),
         },
     )
+
+@asset(partitions_def=hourly_partitions)
+def posts_table_ai(
+    context: AssetExecutionContext, 
+    high_relevance_coding_with_ai: DataFrame
+) -> Output[DataFrame]:
+    return posts_table(
+        context, high_relevance_coding_with_ai)
+
+def posts_table(
+    context: AssetExecutionContext, 
+    content_with_summary: DataFrame
+) -> Output[DataFrame]:
+    pass
