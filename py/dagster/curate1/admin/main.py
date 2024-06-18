@@ -1,6 +1,6 @@
 import argparse
 
-from db import Database
+from curate1.resources.database.database import Database
 
 
 def main():
@@ -13,19 +13,21 @@ def main():
 
   # Command 'db apply'
   db_push_parser = db_subparsers.add_parser('apply', help="Push data to the database")
-  db_push_parser.add_argument('--db-path', type=str, required=False, default="curate1.db", help="Path to the database")
+  db_push_parser.add_argument('--db-path', type=str, required=True, help="Path to the database")
   args = parser.parse_args()
 
   if args.command == 'db':
-    handle_db_command(args.db_command, args)
+    handle_db_command(parser, args, args.db_command)
   else:
-    print(f"Invalid command: {args.command}")
+    parser.print_help()
 
   
-def handle_db_command(db_command, args): 
-  db = Database(args.db_path)
+def handle_db_command(parser, args, db_command): 
   if db_command == 'apply':
+    db = Database(args.db_path)
     db.recreate_db()
+  else:
+    parser.print_help()
 
 if __name__ == "__main__":
   main()
