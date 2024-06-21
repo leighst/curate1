@@ -1,9 +1,10 @@
 import json
 
+import pandas as pd
 from curate1.partitions import hourly_partitions
 from curate1.resources.agent.agent_resource import AgentClient
 from curate1.resources.article_resource import ArticleClient
-from curate1.resources.database.database import Document
+from curate1.resources.database.database import Document, DocumentAttribute
 from curate1.resources.database.database_resource import DatabaseResource
 from curate1.resources.hn_resource import HNClient
 from dagster import AssetExecutionContext, Output, asset
@@ -70,6 +71,8 @@ def hackernews_documents(
     stories: DataFrame, 
     article_client: ArticleClient
 ) -> Output[DataFrame]:
+    stories["document_id"] = stories["id"]
+    
     stories_with_url = stories[stories["url"] != ""]
     none_url = stories[stories["url"] == ""]
     story_urls = stories_with_url["url"].tolist()
@@ -92,36 +95,8 @@ def hackernews_documents(
         }
     )
 
-@asset(partitions_def=hourly_partitions)
-def documents_table(
-    context: AssetExecutionContext, 
-    hackernews_documents: DataFrame, 
-    database_resource: DatabaseResource
-) -> Output[DataFrame]:
-    context.log.info(f"Saving {len(hackernews_documents)} documents to sql...")
-    
-    print(hackernews_documents.columns)
-    
-    documents = [Document(
-        id=None,
-        title=hackernews_documents.iloc[i]["title"],
-        content=hackernews_documents.iloc[i]["contents"],
-        source_url=hackernews_documents.iloc[i]["url"],
-        created_at=hackernews_documents.iloc[i]["time"]
-    ) for i in range(len(hackernews_documents))]
-
-    num_inserted = database_resource.insert_documents(documents)
-
-    return Output(
-        hackernews_documents,
-        metadata={
-            "Documents inserted": num_inserted,
-        }
-    )
-
 # TODO: use dynamic partitions for these
-
-@asset(partitions_def=hourly_partitions, deps=[documents_table])
+@asset(partitions_def=hourly_partitions)
 def relevance_filter_spec_iac(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
@@ -130,7 +105,7 @@ def relevance_filter_spec_iac(
     return relevance_filter_spec(
         context, hackernews_documents, "iac", agent_client)
 
-@asset(partitions_def=hourly_partitions, deps=[documents_table])
+@asset(partitions_def=hourly_partitions)
 def relevance_filter_spec_coding_with_ai(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
@@ -139,6 +114,7 @@ def relevance_filter_spec_coding_with_ai(
     return relevance_filter_spec(
         context, hackernews_documents, "coding-with-ai", agent_client)
 
+# should return document_id, highly_relevant, reasoning, label, value
 def relevance_filter_spec(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
@@ -154,12 +130,15 @@ def relevance_filter_spec(
         contents
     )
 
-    annotations = [json.loads(a.annotation) for a in annotated_docs]
+    json_annotations = [a.annotation for a in annotated_docs]
+    annotations = [json.loads(a) for a in json_annotations]
     highly_relevant = [a["highly_relevant"] for a in annotations]
     reasoning = [a["reasoning"] for a in annotations]
 
     hackernews_documents["highly_relevant"] = highly_relevant
     hackernews_documents["reasoning"] = reasoning
+    hackernews_documents["label"] = f"filter_spec_{spec_name}"
+    hackernews_documents["value"] = annotations
 
     non_empty_annotations = [a for a in annotations if a != ""]
     empty_annotations = [a for a in annotations if a == ""]
@@ -196,20 +175,22 @@ def summary_perspective_summarizer_iac(
     agent_client: AgentClient
 ) -> Output[DataFrame]:
     return summary_perspective_summarizer(
-        context, high_relevance_iac, agent_client)
+        context, high_relevance_iac, "perspective_summarizer_iac", agent_client)
 
 @asset(partitions_def=hourly_partitions)
 def summary_perspective_summarizer_coding_with_ai(
     context: AssetExecutionContext, 
     high_relevance_coding_with_ai: DataFrame, 
-    agent_client: AgentClient
+    agent_client: AgentClient,
 ) -> Output[DataFrame]:
     return summary_perspective_summarizer(
-        context, high_relevance_coding_with_ai, agent_client)
+        context, high_relevance_coding_with_ai, "perspective_summarizer_coding_with_ai",  agent_client)
     
+# should return document_id, summary, reasoning, label, value
 def summary_perspective_summarizer(
     context: AssetExecutionContext, 
     relevance_filtered: DataFrame, 
+    label: str,
     agent_client: AgentClient
 ) -> Output[DataFrame]:
     contents_with_reasoning = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning']))
@@ -219,8 +200,6 @@ def summary_perspective_summarizer(
         contents_with_reasoning
     )
 
-    print(annotated_docs)
-
     annotations = [json.loads(a.annotation) for a in annotated_docs]
     summary = [a["summary"] for a in annotations]
     reasoning = [a["reasoning"] for a in annotations]
@@ -228,9 +207,7 @@ def summary_perspective_summarizer(
     assert len(summary) == len(contents_with_reasoning)
     assert len(reasoning) == len(contents_with_reasoning)
 
-    df = relevance_filtered.assign(summary=summary, reasoning=reasoning)
-    print(df)
-
+    df = relevance_filtered.assign(summary=summary, reasoning=reasoning, value=annotations, label=label)
     return Output(
         df,
         metadata={
@@ -240,15 +217,79 @@ def summary_perspective_summarizer(
     )
 
 @asset(partitions_def=hourly_partitions)
-def posts_table_ai(
+def attributes_data(
     context: AssetExecutionContext, 
-    high_relevance_coding_with_ai: DataFrame
+    relevance_filter_spec_iac: DataFrame,
+    relevance_filter_spec_coding_with_ai: DataFrame,
+    summary_perspective_summarizer_iac: DataFrame,
+    summary_perspective_summarizer_coding_with_ai: DataFrame
 ) -> Output[DataFrame]:
-    return posts_table(
-        context, high_relevance_coding_with_ai)
+    context.log.info(f"Merging attributes data...")
 
-def posts_table(
+    columns = ['document_id', 'time', 'value', 'label']
+
+    all_data = pd.concat([
+        relevance_filter_spec_iac[columns],
+        relevance_filter_spec_coding_with_ai[columns],
+        summary_perspective_summarizer_iac[columns],
+        summary_perspective_summarizer_coding_with_ai[columns]
+    ], ignore_index=True)
+
+    return Output(
+        all_data,
+        metadata={
+            "Relevance filter spec IAC": len(relevance_filter_spec_iac),
+            "Relevance filter spec coding with AI": len(relevance_filter_spec_coding_with_ai),
+            "Summary perspective summarizer IAC": len(summary_perspective_summarizer_iac),
+            "Summary perspective summarizer coding with AI": len(summary_perspective_summarizer_coding_with_ai),
+            "Merged rows": len(all_data)
+        }
+    )
+
+@asset(partitions_def=hourly_partitions)
+def sql_tables(
     context: AssetExecutionContext, 
-    content_with_summary: DataFrame
+    hackernews_documents: DataFrame, 
+    attributes_data: DataFrame, 
+    database_resource: DatabaseResource
 ) -> Output[DataFrame]:
-    pass
+    document_data = hackernews_documents
+
+    # Delete existing document and attribute partitions
+    start, end = context.partition_time_window
+    database_resource.delete_documents_partition(start, end)
+    database_resource.delete_document_attributes_partition(start, end)
+
+    context.log.info(f"Saving {len(document_data)} documents to sql...")
+    documents = [Document(
+        id = None,
+        title = document_data.iloc[i]["title"],
+        content = document_data.iloc[i]["contents"],
+        source_url = document_data.iloc[i]["url"],
+        created_at = document_data.iloc[i]["time"]
+    ) for i in range(len(document_data))]
+
+    document_ids = database_resource.insert_documents(documents)
+    document_data["document_id"] = document_ids   
+
+    print(attributes_data.columns)
+
+    context.log.info(f"Saving {len(attributes_data)} attributes to sql...")
+    document_attributes = [DocumentAttribute(
+        id = None,
+        document_id = attributes_data.iloc[i]["document_id"],
+        value = attributes_data.iloc[i]["value"],
+        label = attributes_data.iloc[i]["label"],
+        created_at = attributes_data.iloc[i]["time"] # inherit from document
+    ) for i in range(len(attributes_data))]
+
+    attribute_ids = database_resource.insert_document_attributes(document_attributes)
+    attributes_data["attribute_id"] = attribute_ids
+
+    return Output(
+        attributes_data, # placeholder...
+        metadata={
+            "Documents inserted": len(document_ids),
+            "Attributes inserted": len(attribute_ids),        
+        }
+    )

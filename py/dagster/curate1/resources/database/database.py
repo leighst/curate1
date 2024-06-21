@@ -1,5 +1,7 @@
+import json
 import os
 import sqlite3
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel
@@ -15,9 +17,9 @@ class Document(BaseModel):
 class DocumentAttribute(BaseModel):
   id: Optional[int]
   document_id: int
-  value: str
+  value: dict
+  label: str
   created_at: int
-
 
 class Database:
   def __init__(self, db_path: str):
@@ -59,39 +61,48 @@ class Database:
     self.conn.commit()
     print("New database created.")
     
-  def insert_documents(self, documents: List[Document]):
+  def delete_documents_partition(self, partition_start: datetime, partition_end: datetime):
+    self.cursor.execute(f'''
+      DELETE FROM document WHERE created_at >= ? AND created_at < ?
+    ''', (partition_start.timestamp(), partition_end.timestamp()))
+    self.conn.commit()
+  
+  def insert_documents(self, documents: List[Document]) -> List[int]:
     cursor = self.conn.cursor()
+    inserted_ids = []
     for document in documents:
-      print("Adding", document)
       if document is None:
         continue
-      sql = f'''
-        INSERT INTO document (id, title, content, source_url, created_at)
-        VALUES ({document.id}, '{document.title}', '{document.content}', '{document.source_url}', {document.created_at})
-      '''
-      print("SQL to be executed:", sql)
       cursor.execute('''
-        INSERT INTO document (id, title, content, source_url, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      ''', (document.id, document.title, document.content, document.source_url, document.created_at))
+        INSERT INTO document (title, content, source_url, created_at)
+        VALUES (?, ?, ?, ?)
+        RETURNING id
+      ''', (document.title, document.content, document.source_url, document.created_at))
+      inserted_id = cursor.fetchone()[0]
+      inserted_ids.append(inserted_id)
     self.conn.commit()
-    print(f"{len(documents)} documents inserted into the database.")
-  
-  def insert_document_attributes(self, document_attributes: List[DocumentAttribute]):
+    return inserted_ids
+
+  def delete_document_attributes_partition(self, partition_start: datetime, partition_end: datetime):
+    self.cursor.execute(f'''
+      DELETE FROM document_attribute WHERE created_at >= ? AND created_at < ?
+    ''', (partition_start.timestamp(), partition_end.timestamp()))
+    self.conn.commit()
+
+  def insert_document_attributes(self, document_attributes: List[DocumentAttribute]) -> List[int]:
     cursor = self.conn.cursor()
+    inserted_ids = []
     for document_attribute in document_attributes:
-      print("Adding", document_attribute)
       if document_attribute is None:
         continue
-      sql = f'''
-        INSERT INTO document_attribute (id, document_id, value, label, created_at)
-        VALUES ({document_attribute.id}, {document_attribute.document_id}, '{document_attribute.value}', '{document_attribute.label}', {document_attribute.created_at})
-      '''
-      print("SQL to be executed:", sql)
+      json_value = json.dumps(document_attribute.value)
       cursor.execute('''
         INSERT INTO document_attribute (id, document_id, value, label, created_at)
         VALUES (?, ?, ?, ?, ?)
-      ''', (document_attribute.id, document_attribute.document_id, document_attribute.value, document_attribute.label, document_attribute.created_at))
+        RETURNING id
+      ''', (document_attribute.id, document_attribute.document_id, json_value, document_attribute.label, document_attribute.created_at))
+      inserted_id = cursor.fetchone()[0]
+      inserted_ids.append(inserted_id)
     self.conn.commit()
-    print(f"{len(document_attributes)} document attributes inserted into the database.")
+    return inserted_ids
 
