@@ -22,7 +22,7 @@ def main():
     parser.print_help()
 
   
-def handle_db_command(parser, args, db_command): 
+def handle_db_command(parser: argparse.ArgumentParser, args: argparse.Namespace, db_command: str): 
   if db_command == 'apply':
     db = Database(args.db_path)
     db.recreate_db()

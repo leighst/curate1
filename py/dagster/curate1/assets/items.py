@@ -1,8 +1,10 @@
 import json
+from typing import Any, Dict, List
 
 import pandas as pd
 from curate1.partitions import hourly_partitions
 from curate1.resources.agent.agent_resource import AgentClient
+from curate1.resources.agent.model import AnnotatedDoc
 from curate1.resources.article_resource import ArticleClient
 from curate1.resources.database.database import Document, DocumentAttribute
 from curate1.resources.database.database_resource import DatabaseResource
@@ -13,18 +15,18 @@ from pandas import DataFrame
 from .id_range_for_time import id_range_for_time
 
 schema = {
-    "id": (int, 0),
-    "time": (int, 0),
-    "type": (str, ""),
-    "by": (str, ""),
-    "dead": (bool, False),
-    "deleted": (bool, False),
-    "text": (str, ""),
-    "kids": (str, ""),
-    "score": (float, 0),
-    "title": (str, ""),
-    "descendants": (float, 0),
-    "url": (str, "")
+    "id": (pd.Int64Dtype(), 0),
+    "time": (pd.Int64Dtype(), 0),
+    "type": (pd.StringDtype(), ""),
+    "by": (pd.StringDtype(), ""),
+    "dead": (pd.BooleanDtype(), False),
+    "deleted": (pd.BooleanDtype(), False),
+    "text": (pd.StringDtype(), ""),
+    "kids": (pd.StringDtype(), ""),
+    "score": (pd.Float64Dtype(), 0),
+    "title": (pd.StringDtype(), ""),
+    "descendants": (pd.Float64Dtype(), 0),
+    "url": (pd.StringDtype(), "")
 }
 
 @asset(partitions_def=hourly_partitions)
@@ -37,29 +39,28 @@ def stories(
 
     context.log.info(f"Downloading range {start_id} up to {end_id}: {end_id - start_id} items.")
 
-    rows = []
+    rows: List[Dict[str, Any]] = []
     for item_id in range(start_id, end_id):
         item = hn_client.fetch_item_by_id(item_id)
-        if (item_id-start_id) % 100 == 0:
-            context.log.info(f"Downloaded {item_id-start_id} items!")
-        if ("type" in item and item["type"] == "story" and 
-            "url" in item and item["url"] != ""):
-            rows.append(item)
+        if item is not None:  # Check if item is not None
+            if (item_id-start_id) % 100 == 0:
+                context.log.info(f"Downloaded {item_id-start_id} items!")
+            if ("type" in item and item["type"] == "story" and 
+                "url" in item and item["url"] != ""):
+                rows.append(item)
 
-    non_none_rows = [row for row in rows if row is not None]
-
-    df = DataFrame.from_dict(non_none_rows)
+    df = DataFrame(rows)
     for column, dtype in schema.items():
         if column not in df:
             df[column] = dtype[1]
-        # TODO: even this doesnt seem to fillna for the url field. ..
-        df[column] = df[column].fillna(dtype[1]).astype(dtype[0])
+        df[column] = df[column].fillna(dtype[1]) # type: ignore
+        df[column] = df[column].astype(dtype[0]) # type: ignore
     
     return Output(
         df,
         metadata={
-            "Non-empty items": len(non_none_rows),
-            "Empty items": rows.count(None),
+            "Rows": len(rows),
+            "Excluded items": end_id-start_id-len(rows),
             **item_range_metadata,
         },
     )
@@ -73,16 +74,16 @@ def hackernews_documents(
 ) -> Output[DataFrame]:
     stories["document_id"] = stories["id"]
     
-    stories_with_url = stories[stories["url"] != ""]
-    none_url = stories[stories["url"] == ""]
-    story_urls = stories_with_url["url"].tolist()
+    stories_with_url: DataFrame = stories[stories["url"] != ""]
+    none_url: DataFrame = stories[stories["url"] == ""]
+    story_urls: List[str] = stories_with_url["url"].tolist()
 
     context.log.info(f"Downloading {len(story_urls)} stories...")
-    story_contents = article_client.fetch_article_content_batch(story_urls)
+    story_contents: List[str|None] = article_client.fetch_article_content_batch(story_urls)
 
-    stories_with_content = stories_with_url.assign(contents=story_contents)
-    stories_with_content["contents"] = stories_with_content["contents"].fillna("")
-    with_content = stories_with_content[stories_with_content["contents"] != ""]
+    stories_with_content: DataFrame = stories_with_url.assign(contents=story_contents) # type: ignore
+    stories_with_content["contents"] = stories_with_content["contents"].fillna("") # type: ignore
+    with_content: DataFrame = stories_with_content[stories_with_content["contents"] != ""]
     none_content = stories_with_content[stories_with_content["contents"] == ""]
     return Output(
         with_content,
@@ -121,7 +122,7 @@ def relevance_filter_spec(
     spec_name: str,
     agent_client: AgentClient
 ) -> Output[DataFrame]:
-    contents = hackernews_documents["contents"].tolist()
+    contents: List[str] = hackernews_documents["contents"].tolist()
     spec_file = f"curate1/resources/agent/prompts/specs/{spec_name}.txt"
     
     context.log.info(f"Annotating {len(contents)} docs...")
@@ -130,7 +131,7 @@ def relevance_filter_spec(
         contents
     )
 
-    json_annotations = [a.annotation for a in annotated_docs]
+    json_annotations = [a.annotation if a is not None else '{}' for a in annotated_docs]  # Handle None in annotations
     annotations = [json.loads(a) for a in json_annotations]
     highly_relevant = [a["highly_relevant"] for a in annotations]
     reasoning = [a["reasoning"] for a in annotations]
@@ -160,13 +161,13 @@ def relevance_filter_spec(
 def high_relevance_iac(
     relevance_filter_spec_iac: DataFrame, 
 ) -> DataFrame:
-    return relevance_filter_spec_iac[relevance_filter_spec_iac["highly_relevant"]]
+    return relevance_filter_spec_iac[relevance_filter_spec_iac["highly_relevant"]] # type: ignore
 
 @asset(partitions_def=hourly_partitions)
 def high_relevance_coding_with_ai(
     relevance_filter_spec_coding_with_ai: DataFrame, 
 ) -> DataFrame:
-    return relevance_filter_spec_coding_with_ai[relevance_filter_spec_coding_with_ai["highly_relevant"]]
+    return relevance_filter_spec_coding_with_ai[relevance_filter_spec_coding_with_ai["highly_relevant"]] # type: ignore
 
 @asset(partitions_def=hourly_partitions)
 def summary_perspective_summarizer_iac(
@@ -193,14 +194,14 @@ def summary_perspective_summarizer(
     label: str,
     agent_client: AgentClient
 ) -> Output[DataFrame]:
-    contents_with_reasoning = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning']))
+    contents_with_reasoning: List[Tuple[str, str]] = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning'])) # type: ignore
     
     context.log.info(f"Annotating {len(contents_with_reasoning)} docs...")
-    annotated_docs = agent_client.perspective_summarizer_batch(
+    annotated_docs: List[AnnotatedDoc|None] = agent_client.perspective_summarizer_batch(
         contents_with_reasoning
     )
 
-    annotations = [json.loads(a.annotation) for a in annotated_docs]
+    annotations = [json.loads(a.annotation) if a is not None else {} for a in annotated_docs]  # Handle None in annotations
     summary = [a["summary"] for a in annotations]
     reasoning = [a["reasoning"] for a in annotations]
 

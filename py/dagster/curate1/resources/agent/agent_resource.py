@@ -1,18 +1,18 @@
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
-import pandas as pd
 from dagster import ConfigurableResource
 
 from .filter_spec import FilterSpec
-from .perspective_summarizer import AnnotatedDoc, PerspectiveSummarizer
+from .model import AnnotatedDoc
+from .perspective_summarizer import PerspectiveSummarizer
 
 PARALLELISM = 4
 
-class AgentClient(ConfigurableResource, ABC):
+class AgentClient(ConfigurableResource[Any], ABC): # type: ignore
     @abstractmethod
-    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> Optional[str]:
+    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
         pass
 
     @abstractmethod

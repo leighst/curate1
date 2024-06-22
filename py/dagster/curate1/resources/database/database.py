@@ -2,7 +2,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel
 
@@ -17,7 +17,7 @@ class Document(BaseModel):
 class DocumentAttribute(BaseModel):
   id: Optional[int]
   document_id: int
-  value: dict
+  value: dict[str, Any]
   label: str
   created_at: int
 
@@ -69,10 +69,8 @@ class Database:
   
   def insert_documents(self, documents: List[Document]) -> List[int]:
     cursor = self.conn.cursor()
-    inserted_ids = []
+    inserted_ids: List[int] = []
     for document in documents:
-      if document is None:
-        continue
       cursor.execute('''
         INSERT INTO document (title, content, source_url, created_at)
         VALUES (?, ?, ?, ?)
@@ -91,10 +89,8 @@ class Database:
 
   def insert_document_attributes(self, document_attributes: List[DocumentAttribute]) -> List[int]:
     cursor = self.conn.cursor()
-    inserted_ids = []
+    inserted_ids: List[int] = []
     for document_attribute in document_attributes:
-      if document_attribute is None:
-        continue
       json_value = json.dumps(document_attribute.value)
       cursor.execute('''
         INSERT INTO document_attribute (id, document_id, value, label, created_at)

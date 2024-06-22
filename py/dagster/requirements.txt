@@ -1,0 +1,7 @@
+dagster==1.7.9
+pandas==2.2.2
+tenacity==8.3.0
+requests==2.32.3
+newspaper3k==0.1.7
+lxml_html_clean==0.1.1
+openai==1.35.3

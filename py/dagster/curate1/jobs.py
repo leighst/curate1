@@ -1,4 +1,4 @@
-from dagster import DailyPartitionsDefinition, define_asset_job
+from dagster import define_asset_job
 
 from .partitions import hourly_partitions
 

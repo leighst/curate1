@@ -8,12 +8,7 @@ module_name = "curate1"
 [project]
 name = "curate1"
 version = "0.1.0"
-dependencies = [
-  "dagster",
-  "pandas",
-  "tenacity",
-  "requests",
-  "newspaper3k",
-  "lxml_html_clean",
-  "openai",
-]
+
+[tools.pyright]
+reportMissingTypeArgument = true  # Report generic classes used without type arguments
+strictListInference = true  # Use union types when inferring types of lists elements, instead of Any

@@ -1,8 +1,9 @@
-import json
 from typing import List
 
 from openai import OpenAI
-from pydantic import BaseModel
+from openai.types.chat import ChatCompletionMessageParam
+
+from .model import AnnotatedDoc
 
 system_prompt_template = """
 You are a research assistant and your job is to summarize articles for me in a manner which emphasizes information relevant to my interests. 
@@ -69,18 +70,14 @@ DOCUMENT CONTENT:
 {document_content}
 """
 
-class AnnotatedDoc(BaseModel):
-  doc: str
-  annotation: str
-
 class PerspectiveSummarizer:
   def __init__(self, openai: OpenAI):
     self.openai = openai
 
-  def apply(self, contents, reasoning) -> List[AnnotatedDoc]:
+  def apply(self, contents: str, reasoning: str) -> AnnotatedDoc:
     system_prompt = system_prompt_template
     user_prompt = user_prompt_template.format(document_content=contents, search_description=reasoning)
-    messages=[
+    messages: List[ChatCompletionMessageParam] = [
       {"role": "system", "content": system_prompt}, 
       {"role": "user", "content": user_prompt}
     ]
