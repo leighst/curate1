@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 module_name = "curate1"
 
 [project]
-name = "curate1"
+name = "curate1-dagster"
 version = "0.1.0"
 
 [tools.pyright]

@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+setup.cfg
+setup.py
+curate1/__init__.py
+curate1/jobs.py
+curate1/partitions.py
+curate1/resources/__init__.py
+curate1/resources/article_resource.py
+curate1/resources/hn_resource.py
+curate1_dagster.egg-info/PKG-INFO
+curate1_dagster.egg-info/SOURCES.txt
+curate1_dagster.egg-info/dependency_links.txt
+curate1_dagster.egg-info/requires.txt
+curate1_dagster.egg-info/top_level.txt
