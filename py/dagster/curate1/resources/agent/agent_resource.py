@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from dagster import ConfigurableResource
 
@@ -10,7 +10,7 @@ from .perspective_summarizer import PerspectiveSummarizer
 
 PARALLELISM = 4
 
-class AgentClient(ConfigurableResource[Any], ABC): # type: ignore
+class AgentClient(ConfigurableResource, ABC):
     @abstractmethod
     def filter_spec_batch(self, spec_file: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
         pass
@@ -27,13 +27,16 @@ class OpenAIAgentClient(AgentClient):
                 filter_spec = FilterSpec.from_env()
                 docs = [content]
                 annotation = filter_spec.apply(docs, spec_file)
-                # TOOD: swith to non array
+                # TOOD: switch to non array
                 return annotation[0]
             except Exception as e:
                 print(f"Error annotating {content[:20]}...: {e}")
                 raise
 
         annotated_posts = []
+
+        print("contents is None", contents is None)
+
         with ThreadPoolExecutor(max_workers=PARALLELISM) as executor:
             annotated_posts = list(executor.map(annotate_post, contents))
         

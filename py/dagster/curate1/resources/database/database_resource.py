@@ -7,7 +7,7 @@ from dagster import ConfigurableResource, InitResourceContext
 from .database import Database, Document, DocumentAttribute
 
 
-class DatabaseResource(ConfigurableResource[Any], ABC): # type: ignore
+class DatabaseResource(ConfigurableResource, ABC):
     @abstractmethod
     def insert_documents(self, documents: List[Document]) -> List[int]:
         pass
@@ -23,7 +23,7 @@ class DatabaseResource(ConfigurableResource[Any], ABC): # type: ignore
     @abstractmethod
     def delete_document_attributes_partition(self, partition_start: datetime, partition_end: datetime):
         pass
-
+    
 
 class SqliteDatabaseResource(DatabaseResource):
     db_path: str

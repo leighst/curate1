@@ -123,7 +123,8 @@ def relevance_filter_spec(
     agent_client: AgentClient
 ) -> Output[DataFrame]:
     contents: List[str] = hackernews_documents["contents"].tolist()
-    spec_file = f"curate1/resources/agent/prompts/specs/{spec_name}.txt"
+    
+    spec_file = f"agent/prompts/specs/{spec_name}.txt"
     
     context.log.info(f"Annotating {len(contents)} docs...")
     annotated_docs = agent_client.filter_spec_batch(

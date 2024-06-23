@@ -58,6 +58,16 @@ class Database:
         FOREIGN KEY(document_id) REFERENCES document(id)
       )
     ''')
+
+    self.cursor.execute('''
+      CREATE TABLE IF NOT EXISTS llm_response_cache (
+        id INTEGER PRIMARY KEY,
+        model TEXT,
+        prompt TEXT,
+        response TEXT,
+        created_at INTEGER
+      )
+    ''')
     self.conn.commit()
     print("New database created.")
     
@@ -102,3 +112,18 @@ class Database:
     self.conn.commit()
     return inserted_ids
 
+  def get_llm_response(self, prompt: str, model: str):
+    self.cursor.execute('''
+      SELECT response FROM llm_response_cache WHERE prompt = ? AND model = ?
+    ''', (prompt, model))
+    result = self.cursor.fetchone()
+    if result:
+      return result[0]
+    return None
+  
+  def insert_llm_response(self, prompt: str, model: str, response: str):
+    self.cursor.execute('''
+      INSERT INTO llm_response_cache (model, prompt, response, created_at)
+      VALUES (?, ?, ?, ?)
+    ''', (model, prompt, response, datetime.now().timestamp()))
+    self.conn.commit()

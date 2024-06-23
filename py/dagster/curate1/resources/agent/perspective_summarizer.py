@@ -3,6 +3,9 @@ from typing import List
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
+from ..llm_response_cache.llm_response_cache import (DbResponseCache,
+                                                     LlmResponseCache)
+from .middleware import create_completion
 from .model import AnnotatedDoc
 
 system_prompt_template = """
@@ -70,9 +73,12 @@ DOCUMENT CONTENT:
 {document_content}
 """
 
+MODEL = "gpt-4o"
+
 class PerspectiveSummarizer:
-  def __init__(self, openai: OpenAI):
+  def __init__(self, openai: OpenAI, cache: LlmResponseCache):
     self.openai = openai
+    self.cache = cache
 
   def apply(self, contents: str, reasoning: str) -> AnnotatedDoc:
     system_prompt = system_prompt_template
@@ -81,13 +87,9 @@ class PerspectiveSummarizer:
       {"role": "system", "content": system_prompt}, 
       {"role": "user", "content": user_prompt}
     ]
-    response = self.openai.chat.completions.create(
-      messages=messages,
-      model="gpt-4o",
-    )
     
     json_str = '{}'
-    content = response.choices[0].message.content
+    content = create_completion(self.cache, self.openai, messages, MODEL)
     if content:
       # Check if content is wrapped in a markdown code block
       if content.startswith("```json"):
@@ -101,4 +103,5 @@ class PerspectiveSummarizer:
   @staticmethod
   def from_env():
       openai = OpenAI()
-      return PerspectiveSummarizer(openai)
+      cache = DbResponseCache.from_env()
+      return PerspectiveSummarizer(openai, cache)

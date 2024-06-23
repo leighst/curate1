@@ -1,8 +1,12 @@
+import json
 from typing import List
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
+from ..llm_response_cache.llm_response_cache import (DbResponseCache,
+                                                     LlmResponseCache)
+from .middleware import create_completion
 from .model import AnnotatedDoc
 
 system_prompt_template = """
@@ -64,10 +68,13 @@ DOCUMENT CONTENT:
 {document_content}
 """
 
+MODEL = "gpt-4o"
+
 
 class FilterSpec:
-  def __init__(self, openai: OpenAI):
+  def __init__(self, openai: OpenAI, cache: LlmResponseCache):
     self.openai = openai
+    self.cache = cache
 
   def apply(self, docs: List[str], spec_file: str) -> List[AnnotatedDoc]:
     annotated_docs: List[AnnotatedDoc] = []
@@ -79,15 +86,14 @@ class FilterSpec:
     for doc in docs:
       system_prompt = system_prompt_template
       user_prompt = user_prompt_template.format(document_content=doc, search_description=spec)
+      
       messages: List[ChatCompletionMessageParam] = [
         {"role": "system", "content": system_prompt}, 
         {"role": "user", "content": user_prompt}
       ]
-      response = self.openai.chat.completions.create(
-        messages=messages,
-        model="gpt-4o",
-      )
-      content = response.choices[0].message.content
+      
+      content = create_completion(self.cache, self.openai, messages, MODEL)
+      
       if content:
         # Check if content is wrapped in a markdown code block
         if content.startswith("```json"):
@@ -103,4 +109,5 @@ class FilterSpec:
   @staticmethod
   def from_env():
       openai = OpenAI()
-      return FilterSpec(openai)
+      cache = DbResponseCache.from_env()
+      return FilterSpec(openai, cache)
