@@ -131,7 +131,7 @@ def keyword_filter_router(
         return row.astype(str).str.contains(keyword_pattern, case=False).any()
     
     filtered_df = hackernews_documents[hackernews_documents.apply(matches_any_keyword, axis=1)]
-    
+    print(filtered_df)
     return Output(
         filtered_df, 
         metadata={
@@ -148,7 +148,7 @@ def relevance_filter_spec_iac(
     context: AssetExecutionContext, 
     candidate_docs_iac: DataFrame, 
     agent_client: AgentClient
-) -> Output[DataFrame]:
+) -> Output[Optional[DataFrame]]:
     return relevance_filter_spec(
         context, candidate_docs_iac, "iac", agent_client)
 
@@ -157,7 +157,7 @@ def relevance_filter_spec_coding_with_ai(
     context: AssetExecutionContext, 
     candidate_docs_coding_with_ai: DataFrame, 
     agent_client: AgentClient
-) -> Output[DataFrame]:
+) -> Output[Optional[DataFrame]]:
     return relevance_filter_spec(
         context, candidate_docs_coding_with_ai, "coding-with-ai", agent_client)
 
@@ -167,7 +167,7 @@ def relevance_filter_spec(
     hackernews_documents: DataFrame, 
     spec_name: str,
     agent_client: AgentClient
-) -> Output[DataFrame]:
+) -> Output[Optional[DataFrame]]:
     contents: List[str] = hackernews_documents["contents"].tolist()
 
     context.log.info(f"Annotating {len(contents)} docs...")
@@ -194,6 +194,8 @@ def relevance_filter_spec(
     num_highly_relevant = len([h for h in highly_relevant if h])
     num_not_relevant = len(annotated_docs) - num_highly_relevant
 
+    print(hackernews_documents)
+
     return Output(
         hackernews_documents,
         metadata={
@@ -207,14 +209,28 @@ def relevance_filter_spec(
 @asset(partitions_def=hourly_partitions)
 def high_relevance_iac(
     relevance_filter_spec_iac: DataFrame, 
-) -> DataFrame:
-    return relevance_filter_spec_iac[relevance_filter_spec_iac["highly_relevant"]]
+) -> Output[DataFrame]:
+    df = relevance_filter_spec_iac.loc[relevance_filter_spec_iac["highly_relevant"]]
+    return Output(
+        df, 
+        metadata={
+            "Input size": len(relevance_filter_spec_iac), 
+            "Output size": len(df)
+        }
+    )
 
 @asset(partitions_def=hourly_partitions)
 def high_relevance_coding_with_ai(
     relevance_filter_spec_coding_with_ai: DataFrame, 
-) -> DataFrame:
-    return relevance_filter_spec_coding_with_ai[relevance_filter_spec_coding_with_ai["highly_relevant"]]
+) -> Output[DataFrame]:
+    df = relevance_filter_spec_coding_with_ai.loc[relevance_filter_spec_coding_with_ai["highly_relevant"]]
+    return Output(
+        df, 
+        metadata={
+            "Input size": len(relevance_filter_spec_coding_with_ai), 
+            "Output size": len(df)
+        }
+    )
 
 @asset(partitions_def=hourly_partitions)
 def summary_perspective_summarizer_iac(
@@ -241,6 +257,8 @@ def summary_perspective_summarizer(
     label: str,
     agent_client: AgentClient
 ) -> Output[DataFrame]:
+    print(relevance_filtered)
+
     contents_with_reasoning: List[Tuple[str, str]] = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning']))
     
     context.log.info(f"Annotating {len(contents_with_reasoning)} docs...")
