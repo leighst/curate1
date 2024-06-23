@@ -12,17 +12,15 @@ def create_completion(cache: LlmResponseCache, openai: OpenAI, messages: List[Ch
   request_str = json.dumps(messages)
   
   cached_response = cache.get_llm_response(request_str, model)
-  if cached_response:
-    return cached_response
+  content = cached_response
+  if cached_response is None:
+    response = openai.chat.completions.create(
+      messages=messages,
+      model=model,
+    )
+    content = response.choices[0].message.content  
   
-  response = openai.chat.completions.create(
-    messages=messages,
-    model=model,
-  )
-
   json_str = '{}'
-  content = response.choices[0].message.content
-  
   if content is None:
     raise ValueError("No content in response")
 
@@ -33,11 +31,12 @@ def create_completion(cache: LlmResponseCache, openai: OpenAI, messages: List[Ch
   else:
     try:
       json.loads(content)
+      json_str = content
     except json.JSONDecodeError:
       raise ValueError(f"Failed to decode JSON: {content}")
-    json_str = content
 
   # Do this after we validate it.
-  cache.insert_llm_response(request_str, model, content)
+  if cached_response is None:
+    cache.insert_llm_response(request_str, model, content)
 
   return json_str
