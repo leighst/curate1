@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from curate1.partitions import hourly_partitions
@@ -10,7 +10,7 @@ from curate1.resources.database.database import Document, DocumentAttribute
 from curate1.resources.database.database_resource import DatabaseResource
 from curate1.resources.hn_resource import HNClient
 from dagster import AssetExecutionContext, Output, asset
-from pandas import DataFrame
+from pandas import DataFrame, Series
 
 from .id_range_for_time import id_range_for_time
 
@@ -53,8 +53,8 @@ def stories(
     for column, dtype in schema.items():
         if column not in df:
             df[column] = dtype[1]
-        df[column] = df[column].fillna(dtype[1]) # type: ignore
-        df[column] = df[column].astype(dtype[0]) # type: ignore
+        df[column] = df[column].fillna(dtype[1])
+        df[column] = df[column].astype(dtype[0])
     
     return Output(
         df,
@@ -81,8 +81,8 @@ def hackernews_documents(
     context.log.info(f"Downloading {len(story_urls)} stories...")
     story_contents: List[str|None] = article_client.fetch_article_content_batch(story_urls)
 
-    stories_with_content: DataFrame = stories_with_url.assign(contents=story_contents) # type: ignore
-    stories_with_content["contents"] = stories_with_content["contents"].fillna("") # type: ignore
+    stories_with_content: DataFrame = stories_with_url.assign(contents=story_contents)
+    stories_with_content["contents"] = stories_with_content["contents"].fillna("")
     with_content: DataFrame = stories_with_content[stories_with_content["contents"] != ""]
     none_content = stories_with_content[stories_with_content["contents"] == ""]
     return Output(
@@ -96,24 +96,70 @@ def hackernews_documents(
         }
     )
 
+@asset(partitions_def=hourly_partitions)
+def candidate_docs_iac(
+    context: AssetExecutionContext, 
+    hackernews_documents: DataFrame, 
+) -> Output[Optional[DataFrame]]:
+    return keyword_filter_router(
+        context, hackernews_documents, "iac")
+
+@asset(partitions_def=hourly_partitions)
+def candidate_docs_coding_with_ai(
+    context: AssetExecutionContext, 
+    hackernews_documents: DataFrame, 
+) -> Output[Optional[DataFrame]]:
+    return keyword_filter_router(
+        context, hackernews_documents, "coding-with-ai")
+
+SPEC_FILTER_MAP = {
+    "iac": ["terraform", "iac", "pulumi", "infrastructure", "cloudformation", "infrastructure as code", "tf"],
+    "coding-with-ai": ["llms", "llm", "ai", "coding", "code", "devin", "codegen", "code generation", "developer productivity", "coding assistant", "copilot", "cursor"],
+}
+
+def keyword_filter_router(
+    context: AssetExecutionContext, 
+    hackernews_documents: DataFrame, 
+    spec_name: str
+) -> Output[Optional[DataFrame]]:
+    if spec_name not in SPEC_FILTER_MAP:
+        raise ValueError(f"Spec name '{spec_name}' is not defined in SPEC_FILTER_MAP.")
+    keywords = SPEC_FILTER_MAP[spec_name]
+    keyword_pattern = '|'.join(keywords)
+    
+    def matches_any_keyword(row: Series) -> bool:
+        return row.astype(str).str.contains(keyword_pattern, case=False).any()
+    
+    filtered_df = hackernews_documents[hackernews_documents.apply(matches_any_keyword, axis=1)]
+    
+    return Output(
+        filtered_df, 
+        metadata={
+            "Spec": spec_name,
+            "Keywords": keywords,
+            "Input size": len(hackernews_documents),
+            "Output size": len(filtered_df),
+        }
+    )
+
 # TODO: use dynamic partitions for these
 @asset(partitions_def=hourly_partitions)
 def relevance_filter_spec_iac(
     context: AssetExecutionContext, 
-    hackernews_documents: DataFrame, 
+    candidate_docs_iac: DataFrame, 
     agent_client: AgentClient
 ) -> Output[DataFrame]:
     return relevance_filter_spec(
-        context, hackernews_documents, "iac", agent_client)
+        context, candidate_docs_iac, "iac", agent_client)
 
 @asset(partitions_def=hourly_partitions)
 def relevance_filter_spec_coding_with_ai(
     context: AssetExecutionContext, 
-    hackernews_documents: DataFrame, 
+    candidate_docs_coding_with_ai: DataFrame, 
     agent_client: AgentClient
 ) -> Output[DataFrame]:
     return relevance_filter_spec(
-        context, hackernews_documents, "coding-with-ai", agent_client)
+        context, candidate_docs_coding_with_ai, "coding-with-ai", agent_client)
 
 # should return document_id, highly_relevant, reasoning, label, value
 def relevance_filter_spec(
@@ -123,16 +169,16 @@ def relevance_filter_spec(
     agent_client: AgentClient
 ) -> Output[DataFrame]:
     contents: List[str] = hackernews_documents["contents"].tolist()
-    
-    spec_file = f"agent/prompts/specs/{spec_name}.txt"
-    
+
     context.log.info(f"Annotating {len(contents)} docs...")
     annotated_docs = agent_client.filter_spec_batch(
-        spec_file,
+        spec_name,
         contents
     )
 
     json_annotations = [a.annotation if a is not None else '{}' for a in annotated_docs]  # Handle None in annotations
+    print(json_annotations)
+
     annotations = [json.loads(a) for a in json_annotations]
     highly_relevant = [a["highly_relevant"] for a in annotations]
     reasoning = [a["reasoning"] for a in annotations]
@@ -162,13 +208,13 @@ def relevance_filter_spec(
 def high_relevance_iac(
     relevance_filter_spec_iac: DataFrame, 
 ) -> DataFrame:
-    return relevance_filter_spec_iac[relevance_filter_spec_iac["highly_relevant"]] # type: ignore
+    return relevance_filter_spec_iac[relevance_filter_spec_iac["highly_relevant"]]
 
 @asset(partitions_def=hourly_partitions)
 def high_relevance_coding_with_ai(
     relevance_filter_spec_coding_with_ai: DataFrame, 
 ) -> DataFrame:
-    return relevance_filter_spec_coding_with_ai[relevance_filter_spec_coding_with_ai["highly_relevant"]] # type: ignore
+    return relevance_filter_spec_coding_with_ai[relevance_filter_spec_coding_with_ai["highly_relevant"]]
 
 @asset(partitions_def=hourly_partitions)
 def summary_perspective_summarizer_iac(
@@ -195,7 +241,7 @@ def summary_perspective_summarizer(
     label: str,
     agent_client: AgentClient
 ) -> Output[DataFrame]:
-    contents_with_reasoning: List[Tuple[str, str]] = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning'])) # type: ignore
+    contents_with_reasoning: List[Tuple[str, str]] = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning']))
     
     context.log.info(f"Annotating {len(contents_with_reasoning)} docs...")
     annotated_docs: List[AnnotatedDoc|None] = agent_client.perspective_summarizer_batch(
@@ -254,7 +300,7 @@ def sql_tables(
     hackernews_documents: DataFrame, 
     attributes_data: DataFrame, 
     database_resource: DatabaseResource
-) -> Output[DataFrame]:
+) -> Output[None]:
     document_data = hackernews_documents
 
     # Delete existing document and attribute partitions
@@ -289,7 +335,7 @@ def sql_tables(
     attributes_data["attribute_id"] = attribute_ids
 
     return Output(
-        attributes_data, # placeholder...
+        None, 
         metadata={
             "Documents inserted": len(document_ids),
             "Attributes inserted": len(attribute_ids),        

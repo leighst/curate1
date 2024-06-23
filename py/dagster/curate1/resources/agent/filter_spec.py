@@ -92,17 +92,8 @@ class FilterSpec:
         {"role": "user", "content": user_prompt}
       ]
       
-      content = create_completion(self.cache, self.openai, messages, MODEL)
-      
-      if content:
-        # Check if content is wrapped in a markdown code block
-        if content.startswith("```json"):
-          # Strip markdown code block syntax to extract JSON
-          json_str = content[7:-3].strip()
-        else:
-          json_str = content
-
-        annotated_docs.append(AnnotatedDoc(doc=doc, annotation=json_str))
+      json_str = create_completion(self.cache, self.openai, messages, MODEL)
+      annotated_docs.append(AnnotatedDoc(doc=doc, annotation=json_str))
 
     return annotated_docs
 

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Tuple
 
-from dagster import ConfigurableResource
+from dagster import ConfigurableResource, file_relative_path
 
 from .filter_spec import FilterSpec
 from .model import AnnotatedDoc
@@ -21,7 +21,9 @@ class AgentClient(ConfigurableResource, ABC):
 
 
 class OpenAIAgentClient(AgentClient):
-    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
+    def filter_spec_batch(self, spec_name: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
+        spec_file = file_relative_path(__file__, f"prompts/specs/{spec_name}.txt")
+
         def annotate_post(content: str) -> Optional[AnnotatedDoc]:
             try:
                 filter_spec = FilterSpec.from_env()
@@ -34,8 +36,6 @@ class OpenAIAgentClient(AgentClient):
                 raise
 
         annotated_posts = []
-
-        print("contents is None", contents is None)
 
         with ThreadPoolExecutor(max_workers=PARALLELISM) as executor:
             annotated_posts = list(executor.map(annotate_post, contents))
