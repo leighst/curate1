@@ -125,10 +125,10 @@ def keyword_filter_router(
     if spec_name not in SPEC_FILTER_MAP:
         raise ValueError(f"Spec name '{spec_name}' is not defined in SPEC_FILTER_MAP.")
     keywords = SPEC_FILTER_MAP[spec_name]
-    keyword_pattern = '|'.join(keywords)
+    keyword_pattern = r'\b(?:' + '|'.join(keywords) + r')\b'
     
     def matches_any_keyword(row: Series) -> bool:
-        return row.astype(str).str.contains(keyword_pattern, case=False).any()
+        return row.astype(str).str.contains(keyword_pattern, case=False, regex=True).any()
     
     filtered_df = hackernews_documents[hackernews_documents.apply(matches_any_keyword, axis=1)]
     print(filtered_df)

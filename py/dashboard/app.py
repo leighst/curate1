@@ -21,7 +21,7 @@ def load_doc_attribs():
 
 st.title('Annotations')
 df = load_doc_attribs()
-df['hourly_date'] = pd.to_datetime(df['created_at'], unit='s').dt.floor('H')
+df['hourly_date'] = pd.to_datetime(df['created_at'], unit='s').dt.floor('h')
 #st.dataframe(grouped_df)
 
 chart_data = df.groupby(['label', 'hourly_date']).size().unstack(fill_value=0).T
@@ -43,7 +43,7 @@ def load_documents():
 
 # Process and display the data
 documents_df = load_documents()
-documents_df['hourly_date'] = pd.to_datetime(documents_df['created_at'], unit='s').dt.floor('H')
+documents_df['hourly_date'] = pd.to_datetime(documents_df['created_at'], unit='s').dt.floor('h')
 doc_count_over_time = documents_df.groupby('hourly_date').size()
 
 st.title('Documents')
