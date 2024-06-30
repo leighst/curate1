@@ -17,11 +17,11 @@ class DatabaseResource(ConfigurableResource, ABC):
         pass
 
     @abstractmethod
-    def delete_documents_partition(self, partition_start: datetime, partition_end: datetime):
+    def delete_documents_partition(self, partition_start: datetime, partition_end: datetime) -> int:
         pass
 
     @abstractmethod
-    def delete_document_attributes_partition(self, partition_start: datetime, partition_end: datetime):
+    def delete_document_attributes_partition(self, partition_start: datetime, partition_end: datetime) -> int:
         pass
     
 
@@ -42,12 +42,12 @@ class SqliteDatabaseResource(DatabaseResource):
             raise ValueError("Database is not initialized.")
         return self._database.insert_document_attributes(document_attributes)
     
-    def delete_documents_partition(self, partition_start: datetime, partition_end: datetime):
+    def delete_documents_partition(self, partition_start: datetime, partition_end: datetime) -> int:
         if self._database is None:
             raise ValueError("Database is not initialized.")
         return self._database.delete_documents_partition(partition_start, partition_end)
 
-    def delete_document_attributes_partition(self, partition_start: datetime, partition_end: datetime):
+    def delete_document_attributes_partition(self, partition_start: datetime, partition_end: datetime) -> int:
         if self._database is None:
             raise ValueError("Database is not initialized.")
         return self._database.delete_document_attributes_partition(partition_start, partition_end)

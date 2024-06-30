@@ -21,10 +21,10 @@ def load_doc_attribs():
 
 st.title('Annotations')
 df = load_doc_attribs()
-df['hourly_date'] = pd.to_datetime(df['created_at'], unit='s').dt.floor('h')
-#st.dataframe(grouped_df)
+df['datetime'] = pd.to_datetime(df['created_at'], unit='s').dt.floor('h')
+df['date_hour'] = df['datetime'].dt.strftime('%Y-%m-%d %H:%M')
 
-chart_data = df.groupby(['label', 'hourly_date']).size().unstack(fill_value=0).T
+chart_data = df.groupby(['label', 'date_hour']).size().unstack(fill_value=0).T
 st.line_chart(chart_data)
 
 # Load data from the documents table
@@ -43,8 +43,8 @@ def load_documents():
 
 # Process and display the data
 documents_df = load_documents()
-documents_df['hourly_date'] = pd.to_datetime(documents_df['created_at'], unit='s').dt.floor('h')
-doc_count_over_time = documents_df.groupby('hourly_date').size()
+documents_df['datetime'] = pd.to_datetime(documents_df['created_at'], unit='s').dt.floor('h')
+doc_count_over_time = documents_df.groupby(documents_df['datetime'].dt.strftime('%Y-%m-%d %H:%M')).size()
 
 st.title('Documents')
 st.line_chart(doc_count_over_time)

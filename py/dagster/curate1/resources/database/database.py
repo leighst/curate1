@@ -75,7 +75,9 @@ class Database:
     self.cursor.execute(f'''
       DELETE FROM document WHERE created_at >= ? AND created_at < ?
     ''', (partition_start.timestamp(), partition_end.timestamp()))
+    deleted_rows = self.cursor.rowcount
     self.conn.commit()
+    return deleted_rows
   
   def insert_documents(self, documents: List[Document]) -> List[int]:
     cursor = self.conn.cursor()
@@ -95,7 +97,9 @@ class Database:
     self.cursor.execute(f'''
       DELETE FROM document_attribute WHERE created_at >= ? AND created_at < ?
     ''', (partition_start.timestamp(), partition_end.timestamp()))
+    deleted_rows = self.cursor.rowcount
     self.conn.commit()
+    return deleted_rows
 
   def insert_document_attributes(self, document_attributes: List[DocumentAttribute]) -> List[int]:
     cursor = self.conn.cursor()
@@ -127,3 +131,17 @@ class Database:
       VALUES (?, ?, ?, ?)
     ''', (model, prompt, response, datetime.now().timestamp()))
     self.conn.commit()
+
+  def get_documents(self, partition_start: datetime, partition_end: datetime):
+    self.cursor.execute(f'''
+      SELECT * FROM document WHERE created_at >= ? AND created_at < ?
+    ''', (partition_start.timestamp(), partition_end.timestamp()))
+    return self.cursor.fetchall()
+  
+  def get_document_attribute(self, partition_start: datetime, partition_end: datetime):
+    q = f'''
+      SELECT * FROM document_attribute WHERE created_at >= ? AND created_at < ?
+    '''
+    print(q)
+    self.cursor.execute(q, (partition_start.timestamp(), partition_end.timestamp()))
+    return self.cursor.fetchall()

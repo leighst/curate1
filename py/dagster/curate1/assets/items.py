@@ -323,8 +323,10 @@ def sql_tables(
 
     # Delete existing document and attribute partitions
     start, end = context.partition_time_window
-    database_resource.delete_documents_partition(start, end)
-    database_resource.delete_document_attributes_partition(start, end)
+    deleted_documents = database_resource.delete_documents_partition(start, end)
+    deleted_attributes = database_resource.delete_document_attributes_partition(start, end)
+
+    print(f"Deleted {deleted_documents} documents and {deleted_attributes} attributes")
 
     context.log.info(f"Saving {len(document_data)} documents to sql...")
     documents = [Document(
@@ -336,18 +338,24 @@ def sql_tables(
     ) for i in range(len(document_data))]
 
     document_ids = database_resource.insert_documents(documents)
-    document_data["document_id"] = document_ids   
+    document_data["database_id"] = document_ids   
 
-    print(attributes_data.columns)
+    # print(document_data[['database_id', 'document_id', 'title', 'time']])
 
     context.log.info(f"Saving {len(attributes_data)} attributes to sql...")
-    document_attributes = [DocumentAttribute(
-        id = None,
-        document_id = attributes_data.iloc[i]["document_id"],
-        value = attributes_data.iloc[i]["value"],
-        label = attributes_data.iloc[i]["label"],
-        created_at = attributes_data.iloc[i]["time"] # inherit from document
-    ) for i in range(len(attributes_data))]
+    document_attributes = []
+    
+    for i in range(len(attributes_data)):
+        doc_id = attributes_data.iloc[i]["document_id"]
+        database_id = document_data.loc[document_data["document_id"] == doc_id]["database_id"].values[0]
+        attr = DocumentAttribute(
+            id = None,
+            document_id = database_id,
+            value = attributes_data.iloc[i]["value"],
+            label = attributes_data.iloc[i]["label"],
+            created_at = attributes_data.iloc[i]["time"] # inherit from document
+        )
+        document_attributes.append(attr)
 
     attribute_ids = database_resource.insert_document_attributes(document_attributes)
     attributes_data["attribute_id"] = attribute_ids
@@ -356,6 +364,8 @@ def sql_tables(
         None, 
         metadata={
             "Documents inserted": len(document_ids),
-            "Attributes inserted": len(attribute_ids),        
+            "Attributes inserted": len(attribute_ids),
+            "Documents deleted": deleted_documents,
+            "Attributes deleted": deleted_attributes,
         }
     )
