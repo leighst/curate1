@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 
 from dagster import ConfigurableResource, file_relative_path
 
-from .filter_spec import FilterSpec
+from .filter_spec import FilterSpec, Relevance
 from .model import AnnotatedDoc
 from .perspective_summarizer import PerspectiveSummarizer
 
@@ -12,7 +12,7 @@ PARALLELISM = 4
 
 class AgentClient(ConfigurableResource, ABC):
     @abstractmethod
-    def filter_spec_batch(self, spec_file: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
+    def filter_spec_batch(self, spec_file: str, relevance: Relevance, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
         pass
 
     @abstractmethod
@@ -21,12 +21,12 @@ class AgentClient(ConfigurableResource, ABC):
 
 
 class OpenAIAgentClient(AgentClient):
-    def filter_spec_batch(self, spec_name: str, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
+    def filter_spec_batch(self, spec_name: str, relevance: Relevance, contents: List[str]) -> List[Optional[AnnotatedDoc]]:
         spec_file = file_relative_path(__file__, f"prompts/specs/{spec_name}.txt")
 
         def annotate_post(content: str) -> Optional[AnnotatedDoc]:
             try:
-                filter_spec = FilterSpec.from_env()
+                filter_spec = FilterSpec.from_env(relevance)
                 docs = [content]
                 annotation = filter_spec.apply(docs, spec_file)
                 # TOOD: switch to non array

@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from curate1.partitions import hourly_partitions
 from curate1.resources.agent.agent_resource import AgentClient
+from curate1.resources.agent.filter_spec import Relevance
 from curate1.resources.agent.model import AnnotatedDoc
 from curate1.resources.article_resource import ArticleClient
 from curate1.resources.database.database import Document, DocumentAttribute
@@ -131,7 +132,6 @@ def keyword_filter_router(
         return row.astype(str).str.contains(keyword_pattern, case=False, regex=True).any()
     
     filtered_df = hackernews_documents[hackernews_documents.apply(matches_any_keyword, axis=1)]
-    print(filtered_df)
     return Output(
         filtered_df, 
         metadata={
@@ -144,28 +144,97 @@ def keyword_filter_router(
 
 # TODO: use dynamic partitions for these
 @asset(partitions_def=hourly_partitions)
-def relevance_filter_spec_iac(
+def label_maybe_relevant_iac(
     context: AssetExecutionContext, 
     candidate_docs_iac: DataFrame, 
     agent_client: AgentClient
 ) -> Output[Optional[DataFrame]]:
     return relevance_filter_spec(
-        context, candidate_docs_iac, "iac", agent_client)
-
+        context, candidate_docs_iac, "iac", Relevance.MAYBE_RELEVANT, agent_client)
+    
 @asset(partitions_def=hourly_partitions)
-def relevance_filter_spec_coding_with_ai(
+def label_maybe_relevant_coding_with_ai(
     context: AssetExecutionContext, 
     candidate_docs_coding_with_ai: DataFrame, 
     agent_client: AgentClient
 ) -> Output[Optional[DataFrame]]:
     return relevance_filter_spec(
-        context, candidate_docs_coding_with_ai, "coding-with-ai", agent_client)
+        context, candidate_docs_coding_with_ai, "coding-with-ai", Relevance.MAYBE_RELEVANT, agent_client)
+
+# TODO: use dynamic partitions for these
+@asset(partitions_def=hourly_partitions)
+def label_highly_relevant_iac(
+    context: AssetExecutionContext, 
+    maybe_relevant_iac: DataFrame, 
+    agent_client: AgentClient
+) -> Output[Optional[DataFrame]]:
+    return relevance_filter_spec(
+        context, maybe_relevant_iac, "iac", Relevance.HIGHLY_RELEVANT, agent_client)
+
+@asset(partitions_def=hourly_partitions)
+def label_highly_relevant_coding_with_ai(
+    context: AssetExecutionContext, 
+    maybe_relevant_coding_with_ai: DataFrame, 
+    agent_client: AgentClient
+) -> Output[Optional[DataFrame]]:
+    return relevance_filter_spec(
+        context, maybe_relevant_coding_with_ai, "coding-with-ai", Relevance.HIGHLY_RELEVANT, agent_client)
+
+# TODO: use dynamic partitions for these
+@asset(partitions_def=hourly_partitions)
+def maybe_relevant_iac(
+    context: AssetExecutionContext, 
+    label_maybe_relevant_iac: DataFrame, 
+    agent_client: AgentClient
+) -> Output[Optional[DataFrame]]:
+    return filter_relevance_labelled(
+        context, label_maybe_relevant_iac)
+    
+@asset(partitions_def=hourly_partitions)
+def maybe_relevant_coding_with_ai(
+    context: AssetExecutionContext, 
+    label_maybe_relevant_coding_with_ai: DataFrame, 
+    agent_client: AgentClient
+) -> Output[Optional[DataFrame]]:
+    return filter_relevance_labelled(
+        context, label_maybe_relevant_coding_with_ai)
+
+# TODO: use dynamic partitions for these
+@asset(partitions_def=hourly_partitions)
+def highly_relevant_iac(
+    context: AssetExecutionContext, 
+    maybe_relevant_iac: DataFrame, 
+) -> Output[Optional[DataFrame]]:
+    return filter_relevance_labelled(
+        context, maybe_relevant_iac)
+
+@asset(partitions_def=hourly_partitions)
+def highly_relevant_coding_with_ai(
+    context: AssetExecutionContext, 
+    maybe_relevant_coding_with_ai: DataFrame, 
+) -> Output[Optional[DataFrame]]:
+    return filter_relevance_labelled(
+        context, maybe_relevant_coding_with_ai)
+
+def filter_relevance_labelled(
+    context: AssetExecutionContext, 
+    relevance_labelled: DataFrame, 
+) -> Output[Optional[DataFrame]]:
+    relevance_filtered = relevance_labelled.loc[relevance_labelled["highly_relevant"]]
+    return Output(
+        relevance_filtered,
+        metadata={
+            "Input size": len(relevance_labelled),
+            "Output size": len(relevance_filtered),
+        },
+    )
 
 # should return document_id, highly_relevant, reasoning, label, value
 def relevance_filter_spec(
     context: AssetExecutionContext, 
     hackernews_documents: DataFrame, 
     spec_name: str,
+    relevance: Relevance,
     agent_client: AgentClient
 ) -> Output[Optional[DataFrame]]:
     contents: List[str] = hackernews_documents["contents"].tolist()
@@ -173,11 +242,11 @@ def relevance_filter_spec(
     context.log.info(f"Annotating {len(contents)} docs...")
     annotated_docs = agent_client.filter_spec_batch(
         spec_name,
+        relevance,
         contents
     )
 
     json_annotations = [a.annotation if a is not None else '{}' for a in annotated_docs]  # Handle None in annotations
-    print(json_annotations)
 
     annotations = [json.loads(a) for a in json_annotations]
     highly_relevant = [a["highly_relevant"] for a in annotations]
@@ -185,7 +254,7 @@ def relevance_filter_spec(
 
     hackernews_documents["highly_relevant"] = highly_relevant
     hackernews_documents["reasoning"] = reasoning
-    hackernews_documents["label"] = f"filter_spec_{spec_name}"
+    hackernews_documents["label"] = f"filter_spec_{spec_name}_{relevance.value}"
     hackernews_documents["value"] = annotations
 
     non_empty_annotations = [a for a in annotations if a != ""]
@@ -193,8 +262,6 @@ def relevance_filter_spec(
 
     num_highly_relevant = len([h for h in highly_relevant if h])
     num_not_relevant = len(annotated_docs) - num_highly_relevant
-
-    print(hackernews_documents)
 
     return Output(
         hackernews_documents,
@@ -207,48 +274,22 @@ def relevance_filter_spec(
     )
 
 @asset(partitions_def=hourly_partitions)
-def high_relevance_iac(
-    relevance_filter_spec_iac: DataFrame, 
-) -> Output[DataFrame]:
-    df = relevance_filter_spec_iac.loc[relevance_filter_spec_iac["highly_relevant"]]
-    return Output(
-        df, 
-        metadata={
-            "Input size": len(relevance_filter_spec_iac), 
-            "Output size": len(df)
-        }
-    )
-
-@asset(partitions_def=hourly_partitions)
-def high_relevance_coding_with_ai(
-    relevance_filter_spec_coding_with_ai: DataFrame, 
-) -> Output[DataFrame]:
-    df = relevance_filter_spec_coding_with_ai.loc[relevance_filter_spec_coding_with_ai["highly_relevant"]]
-    return Output(
-        df, 
-        metadata={
-            "Input size": len(relevance_filter_spec_coding_with_ai), 
-            "Output size": len(df)
-        }
-    )
-
-@asset(partitions_def=hourly_partitions)
 def summary_perspective_summarizer_iac(
     context: AssetExecutionContext, 
-    high_relevance_iac: DataFrame, 
+    highly_relevant_iac: DataFrame, 
     agent_client: AgentClient
 ) -> Output[DataFrame]:
     return summary_perspective_summarizer(
-        context, high_relevance_iac, "perspective_summarizer_iac", agent_client)
+        context, highly_relevant_iac, "perspective_summarizer_iac", agent_client)
 
 @asset(partitions_def=hourly_partitions)
 def summary_perspective_summarizer_coding_with_ai(
     context: AssetExecutionContext, 
-    high_relevance_coding_with_ai: DataFrame, 
+    highly_relevant_coding_with_ai: DataFrame, 
     agent_client: AgentClient,
 ) -> Output[DataFrame]:
     return summary_perspective_summarizer(
-        context, high_relevance_coding_with_ai, "perspective_summarizer_coding_with_ai",  agent_client)
+        context, highly_relevant_coding_with_ai, "perspective_summarizer_coding_with_ai",  agent_client)
     
 # should return document_id, summary, reasoning, label, value
 def summary_perspective_summarizer(
@@ -257,8 +298,6 @@ def summary_perspective_summarizer(
     label: str,
     agent_client: AgentClient
 ) -> Output[DataFrame]:
-    print(relevance_filtered)
-
     contents_with_reasoning: List[Tuple[str, str]] = list(zip(relevance_filtered['contents'], relevance_filtered['reasoning']))
     
     context.log.info(f"Annotating {len(contents_with_reasoning)} docs...")
@@ -284,9 +323,11 @@ def summary_perspective_summarizer(
 
 @asset(partitions_def=hourly_partitions)
 def attributes_data(
-    context: AssetExecutionContext, 
-    relevance_filter_spec_iac: DataFrame,
-    relevance_filter_spec_coding_with_ai: DataFrame,
+    context: AssetExecutionContext,
+    label_maybe_relevant_iac: DataFrame,
+    label_maybe_relevant_coding_with_ai: DataFrame,
+    label_highly_relevant_iac: DataFrame,
+    label_highly_relevant_coding_with_ai: DataFrame,
     summary_perspective_summarizer_iac: DataFrame,
     summary_perspective_summarizer_coding_with_ai: DataFrame
 ) -> Output[DataFrame]:
@@ -295,8 +336,10 @@ def attributes_data(
     columns = ['document_id', 'time', 'value', 'label']
 
     all_data = pd.concat([
-        relevance_filter_spec_iac[columns],
-        relevance_filter_spec_coding_with_ai[columns],
+        label_maybe_relevant_iac[columns],
+        label_maybe_relevant_coding_with_ai[columns],
+        label_highly_relevant_iac[columns],
+        label_highly_relevant_coding_with_ai[columns],
         summary_perspective_summarizer_iac[columns],
         summary_perspective_summarizer_coding_with_ai[columns]
     ], ignore_index=True)
@@ -304,8 +347,10 @@ def attributes_data(
     return Output(
         all_data,
         metadata={
-            "Relevance filter spec IAC": len(relevance_filter_spec_iac),
-            "Relevance filter spec coding with AI": len(relevance_filter_spec_coding_with_ai),
+            "Maybe relevant IAC": len(label_maybe_relevant_iac),
+            "Maybe relevant coding with AI": len(label_maybe_relevant_coding_with_ai),
+            "Highly relevant IAC": len(label_highly_relevant_iac),
+            "Highly relevant coding with AI": len(label_highly_relevant_coding_with_ai),
             "Summary perspective summarizer IAC": len(summary_perspective_summarizer_iac),
             "Summary perspective summarizer coding with AI": len(summary_perspective_summarizer_coding_with_ai),
             "Merged rows": len(all_data)
@@ -326,7 +371,7 @@ def sql_tables(
     deleted_documents = database_resource.delete_documents_partition(start, end)
     deleted_attributes = database_resource.delete_document_attributes_partition(start, end)
 
-    print(f"Deleted {deleted_documents} documents and {deleted_attributes} attributes")
+    context.log.info(f"Deleted {deleted_documents} documents and {deleted_attributes} attributes")
 
     context.log.info(f"Saving {len(document_data)} documents to sql...")
     documents = [Document(
@@ -339,8 +384,6 @@ def sql_tables(
 
     document_ids = database_resource.insert_documents(documents)
     document_data["database_id"] = document_ids   
-
-    # print(document_data[['database_id', 'document_id', 'title', 'time']])
 
     context.log.info(f"Saving {len(attributes_data)} attributes to sql...")
     document_attributes = []

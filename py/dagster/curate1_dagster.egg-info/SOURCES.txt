@@ -8,6 +8,9 @@ curate1/partitions.py
 curate1/resources/__init__.py
 curate1/resources/article_resource.py
 curate1/resources/hn_resource.py
+curate1/resources/database/__init__.py
+curate1/resources/database/database.py
+curate1/resources/database/database_resource.py
 curate1_dagster.egg-info/PKG-INFO
 curate1_dagster.egg-info/SOURCES.txt
 curate1_dagster.egg-info/dependency_links.txt
