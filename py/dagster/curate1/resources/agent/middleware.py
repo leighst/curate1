@@ -1,4 +1,5 @@
 import json
+import re
 from typing import List, Optional
 
 from openai import OpenAI
@@ -25,15 +26,20 @@ def create_completion(cache: LlmResponseCache, openai: OpenAI, messages: List[Ch
     raise ValueError("No content in response")
 
   # Check if content is wrapped in a markdown code block
-  if content.startswith("```json"):
-    # Strip markdown code block syntax to extract JSON
-    json_str = content[7:-3].strip()
+  json_pattern = re.compile(r'^\s*```json\s*(.*?)\s*```', re.DOTALL)
+  match = json_pattern.search(content)
+  if match:
+    json_str = match.group(1).strip()
+    try:
+      json.loads(json_str)
+    except json.JSONDecodeError:
+      raise ValueError(f"Failed to decode JSON in ```json block: {content}")
   else:
     try:
       json.loads(content)
       json_str = content
     except json.JSONDecodeError:
-      raise ValueError(f"Failed to decode JSON: {content}")
+      raise ValueError(f"Failed to decode directly embedded JSON: {content}")
 
   # Do this after we validate it.
   if cached_response is None:

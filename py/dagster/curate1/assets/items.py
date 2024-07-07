@@ -203,24 +203,24 @@ def maybe_relevant_coding_with_ai(
 @asset(partitions_def=hourly_partitions)
 def highly_relevant_iac(
     context: AssetExecutionContext, 
-    maybe_relevant_iac: DataFrame, 
+    label_highly_relevant_iac: DataFrame, 
 ) -> Output[Optional[DataFrame]]:
     return filter_relevance_labelled(
-        context, maybe_relevant_iac)
+        context, label_highly_relevant_iac)
 
 @asset(partitions_def=hourly_partitions)
 def highly_relevant_coding_with_ai(
     context: AssetExecutionContext, 
-    maybe_relevant_coding_with_ai: DataFrame, 
+    label_highly_relevant_coding_with_ai: DataFrame, 
 ) -> Output[Optional[DataFrame]]:
     return filter_relevance_labelled(
-        context, maybe_relevant_coding_with_ai)
+        context, label_highly_relevant_coding_with_ai)
 
 def filter_relevance_labelled(
     context: AssetExecutionContext, 
     relevance_labelled: DataFrame, 
 ) -> Output[Optional[DataFrame]]:
-    relevance_filtered = relevance_labelled.loc[relevance_labelled["highly_relevant"]]
+    relevance_filtered = relevance_labelled.loc[relevance_labelled["relevant"]]
     return Output(
         relevance_filtered,
         metadata={
@@ -249,10 +249,10 @@ def relevance_filter_spec(
     json_annotations = [a.annotation if a is not None else '{}' for a in annotated_docs]  # Handle None in annotations
 
     annotations = [json.loads(a) for a in json_annotations]
-    highly_relevant = [a["highly_relevant"] for a in annotations]
+    relevant = [a["relevant"] for a in annotations]
     reasoning = [a["reasoning"] for a in annotations]
 
-    hackernews_documents["highly_relevant"] = highly_relevant
+    hackernews_documents["relevant"] = relevant
     hackernews_documents["reasoning"] = reasoning
     hackernews_documents["label"] = f"filter_spec_{spec_name}_{relevance.value}"
     hackernews_documents["value"] = annotations
@@ -260,17 +260,20 @@ def relevance_filter_spec(
     non_empty_annotations = [a for a in annotations if a != ""]
     empty_annotations = [a for a in annotations if a == ""]
 
-    num_highly_relevant = len([h for h in highly_relevant if h])
-    num_not_relevant = len(annotated_docs) - num_highly_relevant
+    num_relevant = len([h for h in relevant if h])
+    num_not_relevant = len(annotated_docs) - num_relevant
+
+    metadata = {
+        "Non-empty annotations": len(non_empty_annotations),
+        "Empty annotations": len(empty_annotations),
+        "Relevant": num_relevant,
+        "Not relevant": num_not_relevant,
+    }
+    context.log.info(f"Metadata: {metadata}")
 
     return Output(
         hackernews_documents,
-        metadata={
-            "Non-empty annotations": len(non_empty_annotations),
-            "Empty annotations": len(empty_annotations),
-            "Highly relevant": num_highly_relevant,
-            "Not relevant": num_not_relevant,
-        },
+        metadata=metadata,
     )
 
 @asset(partitions_def=hourly_partitions)
